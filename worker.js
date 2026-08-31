@@ -108,12 +108,13 @@ const ADAPTERS = {
      connect.squareupsandbox.com.
   */
   pos: {
-    configured: false,
-    auth: null,
+    configured: true,
+    auth: 'token',
     oauth: {},
-    async status(env, h) { return { connected: false }; },
-    async fetchRange(env, h, q) { throw new NotConfigured('pos'); },
-    async fetchMonthly(env, h, q) { throw new NotConfigured('pos'); }
+    async status(env, h) { return squareStatus(env, h); },
+    async fetchRange(env, h, q) { return squareRange(env, h, q); },
+    async fetchMonthly(env, h, q) { return squareMonthly(env, h, q); },
+    async scheduledPull(env, h) { return squareSync(env, h); }
   },
 
   /* >>> ADAPTER 3: ROSTERING (optional - only if the owner has one)
@@ -309,31 +310,36 @@ async function xeroFetchRange(env, h, q) {
   return cols[0] || { revenue: 0, cogs: 0, wagesSuper: 0, overheads: 0 };
 }
 
+function emptyMonthly(months) {
+  return { months: months, revenue: months.map(() => null), cogs: months.map(() => null), wagesSuper: months.map(() => null), overheads: months.map(() => null) };
+}
+
 async function xeroFetchMonthly(env, h, q) {
   const months = monthList(q.fromMonth, q.toMonth);
   const result = {};
   months.forEach((mo) => { result[mo] = null; });
-  const CHUNK = 12; /* Xero caps `periods` at 12 */
-  for (let start = 0; start < months.length; start += CHUNK) {
-    const chunk = months.slice(start, start + CHUNK);
-    const lastMo = chunk[chunk.length - 1];
-    const [ly, lm] = lastMo.split('-').map(Number);
-    const lastDay = new Date(Date.UTC(ly, lm, 0)).getUTCDate();
-    const toDate = lastMo + '-' + String(lastDay).padStart(2, '0');
-    const report = await xeroReport(env, h, { toDate: toDate, periods: String(chunk.length), timeframe: 'MONTH' });
-    const cols = xeroParseColumns(report);
-    const hdr = xeroHeaderMonths(report);
-    let mappedByHeader = false;
-    for (let c = 0; c < cols.length; c++) {
-      const mo = hdr[c];
-      if (mo && (mo in result)) { result[mo] = cols[c]; mappedByHeader = true; }
+  /* One single-period P&L per month — the exact call the period cards use, so
+     the trend ties to those verified numbers. Limited concurrency keeps us well
+     under the Worker subrequest budget and Xero's rate/concurrency limits. */
+  try { await xeroTenant(env, h); } catch (e) { return emptyMonthly(months); } /* prewarm tenant once */
+  const CONC = 4;
+  let idx = 0;
+  const run = async () => {
+    while (idx < months.length) {
+      const mo = months[idx++];
+      const [y, m] = mo.split('-').map(Number);
+      const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      try {
+        const cols = xeroParseColumns(await xeroReport(env, h, {
+          fromDate: mo + '-01', toDate: mo + '-' + String(lastDay).padStart(2, '0')
+        }));
+        result[mo] = cols[0] || null;
+      } catch (e) { result[mo] = null; /* a single bad month never breaks the trend */ }
     }
-    if (!mappedByHeader && cols.length) {
-      /* fallback: Xero returns periods oldest -> newest across the chunk */
-      const grid = cols.length === chunk.length ? chunk : chunk.slice(-cols.length);
-      for (let c = 0; c < grid.length; c++) result[grid[c]] = cols[c];
-    }
-  }
+  };
+  const pool = [];
+  for (let i = 0; i < Math.min(CONC, months.length); i++) pool.push(run());
+  await Promise.all(pool);
   return {
     months: months,
     revenue: months.map((m) => (result[m] ? result[m].revenue : null)),
@@ -341,6 +347,107 @@ async function xeroFetchMonthly(env, h, q) {
     wagesSuper: months.map((m) => (result[m] ? result[m].wagesSuper : null)),
     overheads: months.map((m) => (result[m] ? result[m].overheads : null))
   };
+}
+
+/* ============================ Square (POS) ================================
+   Supplies ONE number: the completed-transaction count. Never a dollar figure.
+   Live paging over long ranges is too heavy for the free tier on a busy
+   two-venue account, so the scheduled job (scheduledPull) tallies COMPLETED
+   payments into per-day counts in KV (data:pos:YYYY-MM-DD) and the dashboard
+   reads those. It re-tallies whole Sydney days (idempotent) for freshness and
+   backfills history in chunks, so counts fill in and stay current on the sync
+   cadence. Voided/cancelled excluded; refunds are separate records and never
+   reduce the count.
+=========================================================================== */
+const SQUARE_API = 'https://connect.squareup.com';
+function squareToken(env) { return env.POS_API_TOKEN || ''; }
+async function squareGet(env, path) {
+  const res = await fetch(SQUARE_API + path, {
+    headers: { Authorization: 'Bearer ' + squareToken(env), Accept: 'application/json' }
+  });
+  if (!res.ok) { const e = new Error('square ' + res.status); e.status = res.status; throw e; }
+  return res.json();
+}
+/* Sydney calendar date (DST-aware) for a timestamp -> 'YYYY-MM-DD'. */
+function sydDate(ts) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ts));
+}
+function addDaysStr(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function lastNDates(endDateStr, n) {
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(addDaysStr(endDateStr, -i));
+  return out;
+}
+
+async function squareStatus(env, h) {
+  if (!squareToken(env)) return { connected: false };
+  const data = await squareGet(env, '/v2/locations');
+  const locs = (data && data.locations) || [];
+  const active = locs.filter((l) => (l.status || 'ACTIVE') === 'ACTIVE');
+  const pick = active[0] || locs[0] || null;
+  const name = pick ? (pick.business_name || pick.name || null) : null;
+  return { connected: locs.length > 0, org: name, sandbox: false };
+}
+
+async function squareRange(env, h, q) {
+  const r = await h.readIngested(q.from, q.to);
+  if (!r.daysWithData) return { count: null }; /* not synced yet -> honest gap, not a false 0 */
+  return { count: r.sums.count || 0 };
+}
+
+async function squareMonthly(env, h, q) {
+  const m = await h.monthlyIngested(q.fromMonth, q.toMonth);
+  return { months: m.months, count: m.byMonth.map((x) => (x && typeof x.count === 'number') ? x.count : null) };
+}
+
+/* Count COMPLETED payments for a set of whole Sydney days and store per-day.
+   Over-covers the UTC window by a day each side (DST-safe) and buckets each
+   payment by its true Sydney date, writing only the requested days. */
+async function squareTallyDates(env, h, dates, pageCap) {
+  if (!dates.length) return;
+  const want = new Set(dates);
+  const sorted = dates.slice().sort();
+  const beginUtc = addDaysStr(sorted[0], -1) + 'T00:00:00Z';
+  const endUtc = addDaysStr(sorted[sorted.length - 1], 2) + 'T00:00:00Z';
+  const counts = {};
+  for (const d of dates) counts[d] = 0;
+  let cursor = null, pages = 0;
+  do {
+    let path = '/v2/payments?sort_order=ASC&limit=100&begin_time=' + encodeURIComponent(beginUtc) + '&end_time=' + encodeURIComponent(endUtc);
+    if (cursor) path += '&cursor=' + encodeURIComponent(cursor);
+    const data = await squareGet(env, path);
+    for (const p of (data.payments || [])) {
+      if ((p.status || '') !== 'COMPLETED') continue;
+      const d = sydDate(p.created_at);
+      if (want.has(d)) counts[d]++;
+    }
+    cursor = data.cursor || null;
+    pages++;
+  } while (cursor && pages < (pageCap || 40));
+  await h.saveIngestedRows(dates.map((d) => ({ date: d, count: counts[d] || 0 })));
+}
+
+/* Scheduled tally: keep the last few days fresh, then backfill history in
+   20-day chunks moving backward until ~25 months are covered. */
+async function squareSync(env, h) {
+  if (!squareToken(env)) return;
+  const today = sydDate(new Date().toISOString());
+  await squareTallyDates(env, h, lastNDates(today, 3), 40); /* recent days stay fresh */
+  const floor = addDaysStr(today, -760);
+  const anchor = (await env.TOKENS.get('pos:backfill_cursor')) || addDaysStr(today, 1);
+  if (anchor > floor) {
+    const chunk = [];
+    let d = addDaysStr(anchor, -1);
+    for (let i = 0; i < 20 && d >= floor; i++) { chunk.push(d); d = addDaysStr(d, -1); }
+    if (chunk.length) {
+      await squareTallyDates(env, h, chunk, 40);
+      await env.TOKENS.put('pos:backfill_cursor', chunk[chunk.length - 1]);
+    }
+  }
 }
 
 /* ---------------- Token store (KV) with refresh built in ---------------- */

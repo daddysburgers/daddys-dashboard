@@ -56,10 +56,10 @@ id = "a90aade253f049c4bc0b91430aa2f3e8"   # pinned after first deploy (from the 
 # ----------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------
-# Cron rung (only when an adapter uses scheduledPull to fetch a tool's own
-# export on a schedule). Uncomment and set a sensible cadence:
-# [triggers]
-# crons = ["0 3 * * *"]   # daily, 3am UTC - adjust to land after the tool's
-#                          # own export runs
+# Cron rung: the Square (pos) adapter's scheduledPull tallies completed
+# transaction counts into KV. Every 5 minutes keeps recent days fresh and
+# backfills history in chunks; steady-state it just re-tallies the last 3 days.
+[triggers]
+crons = ["*/5 * * * *"]
 # ----------------------------------------------------------------------------
 # EOF wrangler.toml
