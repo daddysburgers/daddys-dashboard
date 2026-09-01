@@ -384,14 +384,18 @@ function lastNDates(endDateStr, n) {
   return out;
 }
 
+async function squareLocations(env) {
+  const data = await squareGet(env, '/v2/locations');
+  return (data && data.locations) || [];
+}
 async function squareStatus(env, h) {
   if (!squareToken(env)) return { connected: false };
-  const data = await squareGet(env, '/v2/locations');
-  const locs = (data && data.locations) || [];
+  const locs = await squareLocations(env);
   const active = locs.filter((l) => (l.status || 'ACTIVE') === 'ACTIVE');
   const pick = active[0] || locs[0] || null;
   const name = pick ? (pick.business_name || pick.name || null) : null;
-  return { connected: locs.length > 0, org: name, sandbox: false };
+  const label = active.length > 1 ? (name + ' (' + active.length + ' locations)') : name;
+  return { connected: locs.length > 0, org: label, sandbox: false };
 }
 
 /* Read per-day pos counts from KV in parallel batches (fast, no sequential
@@ -451,27 +455,43 @@ async function squareTallyDates(env, h, dates, pageCap) {
   const endUtc = addDaysStr(sorted[sorted.length - 1], 2) + 'T00:00:00Z';
   const counts = {};
   for (const d of dates) counts[d] = 0;
-  let cursor = null, pages = 0;
-  do {
-    let path = '/v2/payments?sort_order=ASC&limit=100&begin_time=' + encodeURIComponent(beginUtc) + '&end_time=' + encodeURIComponent(endUtc);
-    if (cursor) path += '&cursor=' + encodeURIComponent(cursor);
-    const data = await squareGet(env, path);
-    for (const p of (data.payments || [])) {
-      if ((p.status || '') !== 'COMPLETED') continue;
-      const d = sydDate(p.created_at);
-      if (want.has(d)) counts[d]++;
-    }
-    cursor = data.cursor || null;
-    pages++;
-  } while (cursor && pages < (pageCap || 40));
+  /* Count every active location (Windsor + Richmond) — ListPayments without a
+     location_id only returns the main location, which was undercounting. */
+  const active = (await squareLocations(env)).filter((l) => (l.status || 'ACTIVE') === 'ACTIVE');
+  const locIds = active.map((l) => l.id).filter(Boolean);
+  const targets = locIds.length ? locIds : [null];
+  for (const locId of targets) {
+    let cursor = null, pages = 0;
+    do {
+      let path = '/v2/payments?sort_order=ASC&limit=100&begin_time=' + encodeURIComponent(beginUtc) + '&end_time=' + encodeURIComponent(endUtc);
+      if (locId) path += '&location_id=' + encodeURIComponent(locId);
+      if (cursor) path += '&cursor=' + encodeURIComponent(cursor);
+      const data = await squareGet(env, path);
+      for (const p of (data.payments || [])) {
+        if ((p.status || '') !== 'COMPLETED') continue;
+        const d = sydDate(p.created_at);
+        if (want.has(d)) counts[d]++;
+      }
+      cursor = data.cursor || null;
+      pages++;
+    } while (cursor && pages < (pageCap || 40));
+  }
   await h.saveIngestedRows(dates.map((d) => ({ date: d, count: counts[d] || 0 })));
 }
 
 /* Scheduled tally: keep the last few days fresh, then backfill history in
    20-day chunks moving backward until ~25 months are covered. */
+const POS_SYNC_VER = 'loc2'; /* bump to force a full history re-walk after a counting change */
+
 async function squareSync(env, h) {
   if (!squareToken(env)) return;
   const today = sydDate(new Date().toISOString());
+  /* If the counting logic changed (e.g. now counting all locations), reset the
+     backfill so previously-stored days get re-tallied and corrected. */
+  if ((await env.TOKENS.get('pos:sync_ver')) !== POS_SYNC_VER) {
+    await env.TOKENS.put('pos:backfill_cursor', addDaysStr(today, 1));
+    await env.TOKENS.put('pos:sync_ver', POS_SYNC_VER);
+  }
   await squareTallyDates(env, h, lastNDates(today, 3), 40); /* recent days stay fresh */
   const floor = addDaysStr(today, -760);
   const anchor = (await env.TOKENS.get('pos:backfill_cursor')) || addDaysStr(today, 1);
