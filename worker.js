@@ -304,10 +304,31 @@ async function xeroReport(env, h, params) {
   return r;
 }
 
+/* Inclusive day count of a from..to range. */
+function daySpan(from, to) {
+  return Math.round((Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000) + 1;
+}
+/* Daddy's pays weekly, one Wednesday after each Tuesday period-end, so a week's
+   wages post in the FOLLOWING Mon-Sun week. For WEEK-length views only, pull
+   wagesSuper from the next week's window so each pay run lines up with the week
+   it was worked (revenue/cogs/overheads stay on the real week). Monthly and
+   longer views are unaffected — their wage total already reconciles to Xero. */
+const WAGE_WEEK_SHIFT_DAYS = 7;
+
 async function xeroFetchRange(env, h, q) {
-  const report = await xeroReport(env, h, { fromDate: q.from, toDate: q.to });
-  const cols = xeroParseColumns(report);
-  return cols[0] || { revenue: 0, cogs: 0, wagesSuper: 0, overheads: 0 };
+  const base = xeroParseColumns(await xeroReport(env, h, { fromDate: q.from, toDate: q.to }))[0]
+    || { revenue: 0, cogs: 0, wagesSuper: 0, overheads: 0 };
+  const span = daySpan(q.from, q.to);
+  if (span >= 1 && span <= 8) { /* a week (or part-week) view */
+    try {
+      const shifted = xeroParseColumns(await xeroReport(env, h, {
+        fromDate: addDaysStr(q.from, WAGE_WEEK_SHIFT_DAYS),
+        toDate: addDaysStr(q.to, WAGE_WEEK_SHIFT_DAYS)
+      }))[0];
+      if (shifted) base.wagesSuper = shifted.wagesSuper;
+    } catch (e) { /* keep the unshifted wages if the second pull fails */ }
+  }
+  return base;
 }
 
 function emptyMonthly(months) {

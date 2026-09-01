@@ -614,15 +614,18 @@ function periodValues(slot) {  /* slot: 'cur' | 'prev' | 'yoy' */
   return out;
 }
 function num(v) { return (typeof v === 'number' && isFinite(v)) ? v : null; }
-/* Which cards should read as owner-entered for a slot's values. */
+/* Badge "Entered by you" ONLY on cards whose headline dollar figure was typed
+   in. Wage %, Overheads, ACS and Profit still use whatever revenue is current
+   (entered or live) as their base, but their own dollars stay live, so they are
+   not badged as entered. */
 function usesManual(key, vals) {
   var m = vals && vals._manual;
   if (!m) return false;
   if (key === 'revenue') return !!m.revenue;
   if (key === 'cogs') return !!m.cogs;
-  if (key === 'transactions') return false;
-  if (key === 'profit') return !!(m.revenue || m.cogs);
-  return !!m.revenue; /* acs, wage, overheads all divide by revenue */
+  if (key === 'wage') return !!m.wagesSuper;
+  if (key === 'overheads') return !!m.overheads;
+  return false; /* transactions, acs, profit: derived — not badged as entered */
 }
 function parseMoneyInput(s) {
   if (s == null) return null;
