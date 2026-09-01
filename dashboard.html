@@ -312,6 +312,7 @@ function defaultSettings() {
     timezone: TZ_DEFAULTS[KIT_CONFIG.region] || 'Australia/Sydney',
     accent: 'gold',
     dataMode: KIT_CONFIG.startLevel === 'manual' ? 'manual' : 'live',
+    location: 'combined',    /* combined | windsor | richmond */
     targets: { cogs: 30, wage: 30, overheads: 30, profit: 10 }
   };
 }
@@ -584,32 +585,60 @@ function srcStatus(key) {
 }
 function isConfigured(key) { var s = srcStatus(key); return !!s.configured; }
 
-function periodValues(slot) {  /* slot: 'cur' | 'prev' | 'yoy' */
+function curLoc() { return SETTINGS.location || 'combined'; }
+function slotRange(slot) {
+  var rr = resolvePeriod(state.period, state.customFrom, state.customTo);
+  return slot === 'cur' ? { from: rr.from, to: rr.to } : (slot === 'prev' ? rr.prev : (slot === 'yoy' ? rr.yoy : null));
+}
+function overrideFor(slot) {
+  if (isManual()) return null;
+  var rng = slotRange(slot);
+  return rng ? (OVERRIDES[rangeKey(rng.from, rng.to)] || null) : null;
+}
+
+function periodValues(slot) {  /* slot: 'cur' | 'prev' | 'yoy' — resolved for the selected shop */
   var d = state.data;
   if (!d || !d.periods || !d.periods[slot]) return {};
   var p = d.periods[slot];
   var acc = p.accounting || null;
   var pos = p.pos || null;
   var ros = p.rostering || null;
-  var out = {};
-  if (acc) {
-    out.revenue = num(acc.revenue);
-    out.cogs = num(acc.cogs);
-    out.wagesSuper = num(acc.wagesSuper);
-    out.overheads = num(acc.overheads);
+  var aLoc = (acc && acc.byLoc) || {};
+  var pLoc = (pos && pos.byLoc) || {};
+  var ov = overrideFor(slot) || {};
+
+  function liveRev(loc) { return loc === 'combined' ? (acc ? num(acc.revenue) : null) : (aLoc[loc] ? num(aLoc[loc].revenue) : null); }
+  function liveCogs(loc) { return loc === 'combined' ? (acc ? num(acc.cogs) : null) : (aLoc[loc] ? num(aLoc[loc].cogs) : null); }
+  function liveCount(loc) { return loc === 'combined' ? (pos ? num(pos.count) : null) : (pLoc[loc] ? num(pLoc[loc].count) : null); }
+  function ovNum(loc, field) { var o = ov[loc]; return (o && typeof o[field] === 'number' && isFinite(o[field])) ? o[field] : null; }
+  function shopVal(loc, field, liveFn) { var o = ovNum(loc, field); return o != null ? o : liveFn(loc); }
+  function untagged(field, liveFn) {
+    return (acc && aLoc.windsor && aLoc.richmond) ? (num(acc[field]) - num(aLoc.windsor[field]) - num(aLoc.richmond[field])) : 0;
   }
-  if (pos) out.count = num(pos.count);
-  if (ros) out.rosteredCost = num(ros.cost);
-  /* Overlay owner-entered figures (hybrid live+manual), by this slot's dates. */
-  if (!isManual()) {
-    var rr = resolvePeriod(state.period, state.customFrom, state.customTo);
-    var rng = slot === 'cur' ? { from: rr.from, to: rr.to } : (slot === 'prev' ? rr.prev : (slot === 'yoy' ? rr.yoy : null));
-    var ov = rng ? OVERRIDES[rangeKey(rng.from, rng.to)] : null;
-    if (ov) {
-      out._manual = {};
-      if (typeof ov.revenue === 'number' && isFinite(ov.revenue)) { out.revenue = ov.revenue; out._manual.revenue = true; }
-      if (typeof ov.cogs === 'number' && isFinite(ov.cogs)) { out.cogs = ov.cogs; out._manual.cogs = true; }
+  /* Combined value for revenue/cogs: legacy single entry, else sum of per-shop
+     (entered where given, live otherwise) plus any untagged remainder. */
+  function combined(field, liveFn) {
+    if (typeof ov[field] === 'number' && isFinite(ov[field])) return { v: ov[field], m: true };
+    if (ovNum('windsor', field) != null || ovNum('richmond', field) != null) {
+      return { v: (shopVal('windsor', field, liveFn) || 0) + (shopVal('richmond', field, liveFn) || 0) + (untagged(field, liveFn) || 0), m: true };
     }
+    return { v: liveFn('combined'), m: false };
+  }
+
+  var loc = curLoc();
+  var out = { _manual: {} };
+  if (loc === 'combined') {
+    var cr = combined('revenue', liveRev); out.revenue = cr.v; if (cr.m) out._manual.revenue = true;
+    var cc = combined('cogs', liveCogs); out.cogs = cc.v; if (cc.m) out._manual.cogs = true;
+    out.wagesSuper = acc ? num(acc.wagesSuper) : null;
+    out.overheads = acc ? num(acc.overheads) : null;
+    out.count = liveCount('combined');
+    if (ros) out.rosteredCost = num(ros.cost);
+  } else {
+    out.revenue = shopVal(loc, 'revenue', liveRev); if (ovNum(loc, 'revenue') != null) out._manual.revenue = true;
+    out.cogs = shopVal(loc, 'cogs', liveCogs); if (ovNum(loc, 'cogs') != null) out._manual.cogs = true;
+    out.wagesSuper = null; out.overheads = null; /* combined-only metrics */
+    out.count = liveCount(loc);
   }
   return out;
 }
@@ -865,6 +894,16 @@ function renderDashboard(root) {
   });
   root.appendChild(bar);
 
+  /* Shop selector — flip the whole board to one shop or the combined total. */
+  var lbar = el('div', 'period-bar');
+  lbar.appendChild(el('span', 'period-label', 'Shop'));
+  [['combined', 'Combined'], ['windsor', 'Windsor'], ['richmond', 'Richmond']].forEach(function (o) {
+    var c = el('button', 'pchip' + (curLoc() === o[0] ? ' on' : ''), o[1]);
+    c.onclick = function () { SETTINGS.location = o[0]; saveSettings(); render(); };
+    lbar.appendChild(c);
+  });
+  root.appendChild(lbar);
+
   if (state.period === 'custom') {
     var cw = el('div', 'custom-wrap');
     var f = document.createElement('input'); f.type = 'date'; f.id = 'cfrom'; if (state.customFrom) f.value = state.customFrom;
@@ -919,10 +958,13 @@ function renderDashboard(root) {
     root.appendChild(mb);
   }
 
-  /* Cards */
+  /* Cards. Per-shop views show only the metrics that split cleanly by shop;
+     Wage %, Overheads and Profit are combined-only (shared costs). */
   var grid = el('div', 'cards');
   var cur = periodValues('cur'), prev = periodValues('prev'), yoy = periodValues('yoy');
-  CHOSEN.forEach(function (k) { grid.appendChild(metricCard(k, cur, prev, yoy, r)); });
+  var shopMetrics = ['revenue', 'transactions', 'acs', 'cogs'];
+  CHOSEN.filter(function (k) { return curLoc() === 'combined' || shopMetrics.indexOf(k) >= 0; })
+    .forEach(function (k) { grid.appendChild(metricCard(k, cur, prev, yoy, r)); });
   root.appendChild(grid);
 }
 
@@ -944,7 +986,7 @@ function overridePanel(r) {
   sum.textContent = (has ? '✎ Your figures for ' : '✎ Enter your own Revenue / Cost of goods for ') + periodLabel().toLowerCase() + (has ? ' — edit' : ' (optional)');
   det.appendChild(sum);
 
-  var hint = el('div', null, 'Type your Revenue and Cost of goods for this period and the board uses them, marked “Entered by you.” Wages and transactions stay live. Leave a box blank to keep using Xero for it.');
+  var hint = el('div', null, 'Type each shop’s Revenue and Cost of goods for this period. The board uses your figures (marked “Entered by you”) and the Combined view adds them up. Transactions stay live from Square; leave a box blank to keep using Xero for it.');
   hint.style.cssText = 'color:var(--muted);margin:8px 0 10px;line-height:1.6';
   det.appendChild(hint);
 
@@ -960,18 +1002,29 @@ function overridePanel(r) {
     wrap.appendChild(inp);
     return inp;
   }
-  var revIn = field('Revenue (ex-GST)', ov.revenue);
-  var cogIn = field('Cost of goods', ov.cogs);
-  var row = el('div'); row.style.cssText = 'display:flex;flex-wrap:wrap;align-items:flex-end';
-  row.appendChild(revIn.parentNode); row.appendChild(cogIn.parentNode);
-  det.appendChild(row);
+  function shopFields(title, saved) {
+    var box = el('div'); box.style.cssText = 'margin:0 26px 6px 0';
+    var h2 = el('div', null, title); h2.style.cssText = 'font-weight:600;color:var(--black);margin-bottom:6px'; box.appendChild(h2);
+    var row = el('div'); row.style.cssText = 'display:flex;flex-wrap:wrap;align-items:flex-end';
+    var rev = field('Revenue (ex-GST)', saved.revenue);
+    var cog = field('Cost of goods', saved.cogs);
+    row.appendChild(rev.parentNode); row.appendChild(cog.parentNode);
+    box.appendChild(row);
+    return { rev: rev, cog: cog, box: box };
+  }
+  var win = shopFields('Windsor', ov.windsor || {});
+  var rich = shopFields('Richmond', ov.richmond || {});
+  var wrap = el('div'); wrap.style.cssText = 'display:flex;flex-wrap:wrap';
+  wrap.appendChild(win.box); wrap.appendChild(rich.box);
+  det.appendChild(wrap);
 
   var actions = el('div'); actions.style.cssText = 'margin-top:4px;display:flex;gap:10px;align-items:center';
   var save = el('button', 'btn-small', 'Save my figures');
   save.onclick = function () {
     var o = {};
-    var rv = parseMoneyInput(revIn.value); if (rv != null) o.revenue = rv;
-    var cv = parseMoneyInput(cogIn.value); if (cv != null) o.cogs = cv;
+    function shop(f) { var s = {}; var rv = parseMoneyInput(f.rev.value); if (rv != null) s.revenue = rv; var cv = parseMoneyInput(f.cog.value); if (cv != null) s.cogs = cv; return Object.keys(s).length ? s : null; }
+    var w = shop(win); if (w) o.windsor = w;
+    var rr = shop(rich); if (rr) o.richmond = rr;
     if (Object.keys(o).length) OVERRIDES[key] = o; else delete OVERRIDES[key];
     saveOverrides(); render();
   };
@@ -1079,14 +1132,16 @@ function trendSeries(key) {
   var months = d.trend.months;
   var acc = d.trend.accounting || {};
   var pos = d.trend.pos || {};
+  var suf = curLoc() === 'combined' ? '' : '_' + curLoc(); /* per-shop revenue/cogs/count arrays */
+  var revA = acc['revenue' + suf], cogA = acc['cogs' + suf], cntA = pos['count' + suf];
   function at(arr, i) { return (arr && arr[i] != null) ? arr[i] : null; }
   function val(i) {
-    var rev = at(acc.revenue, i);
+    var rev = at(revA, i);
     if (key === 'revenue') return rev;
-    if (key === 'transactions') return at(pos.count, i);
-    if (key === 'acs') { var c = at(pos.count, i); return (rev == null || c == null || c === 0) ? null : rev / c; }
+    if (key === 'transactions') return at(cntA, i);
+    if (key === 'acs') { var c = at(cntA, i); return (rev == null || c == null || c === 0) ? null : rev / c; }
     if (rev == null || rev === 0) return null;
-    var cg = at(acc.cogs, i), wg = at(acc.wagesSuper, i), oh = at(acc.overheads, i);
+    var cg = at(cogA, i), wg = at(acc.wagesSuper, i), oh = at(acc.overheads, i);
     if (key === 'cogs') return (cg == null) ? null : (cg / rev) * 100;
     if (key === 'overheads') return (oh == null) ? null : (oh / rev) * 100;
     if (key === 'wage') return (wg == null) ? null : (wg / rev) * 100;

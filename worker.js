@@ -170,6 +170,12 @@ const XERO_CONNECTIONS = 'https://api.xero.com/connections';
 const WAGE_RE = /\b(wages?|salar(?:y|ies)|superannuation|super|payroll|annual leave|long service)\b/i;
 const NONOP_RE = /(income tax|\binterest\b|depreciat|amortis|amortiz|revaluation|foreign currency|unrealised curren|realised curren)/i;
 const XMONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+/* Which shop an account label or Square location name belongs to. */
+function locSlug(label) {
+  if (/windsor/i.test(label)) return 'windsor';
+  if (/richmond/i.test(label)) return 'richmond';
+  return null;
+}
 
 function xeroNum(v) {
   if (v == null) return 0;
@@ -215,7 +221,7 @@ function xeroParseColumns(report) {
   const rows = (report && report.Rows) || [];
   const cols = xeroColumnCount(report);
   const acc = [];
-  for (let c = 0; c < cols; c++) acc.push({ revenue: 0, cogs: 0, wagesSuper: 0, overheads: 0 });
+  for (let c = 0; c < cols; c++) acc.push({ revenue: 0, cogs: 0, wagesSuper: 0, overheads: 0, wr: 0, wc: 0, rr: 0, rc: 0 });
 
   for (const section of rows) {
     if (!section || section.RowType !== 'Section') continue;
@@ -230,12 +236,13 @@ function xeroParseColumns(report) {
 
     for (const row of xeroLeafRows(section)) {
       const label = (row.Cells[0] && row.Cells[0].Value) || '';
+      const slug = locSlug(label); /* per-shop split for revenue & cogs (Windsor/Richmond) */
       for (let c = 0; c < cols; c++) {
         const cell = row.Cells[c + 1];
         const amt = xeroNum(cell && cell.Value);
         if (!amt) continue;
-        if (kind === 'revenue') acc[c].revenue += amt;
-        else if (kind === 'cogs') acc[c].cogs += amt;
+        if (kind === 'revenue') { acc[c].revenue += amt; if (slug === 'windsor') acc[c].wr += amt; else if (slug === 'richmond') acc[c].rr += amt; }
+        else if (kind === 'cogs') { acc[c].cogs += amt; if (slug === 'windsor') acc[c].wc += amt; else if (slug === 'richmond') acc[c].rc += amt; }
         else if (kind === 'expenses') {
           if (WAGE_RE.test(label)) acc[c].wagesSuper += amt;
           else if (NONOP_RE.test(label)) { /* non-operating: excluded from overheads and profit */ }
@@ -245,7 +252,10 @@ function xeroParseColumns(report) {
     }
   }
   const cents = (x) => Math.round(x * 100) / 100;
-  return acc.map((o) => ({ revenue: cents(o.revenue), cogs: cents(o.cogs), wagesSuper: cents(o.wagesSuper), overheads: cents(o.overheads) }));
+  return acc.map((o) => ({
+    revenue: cents(o.revenue), cogs: cents(o.cogs), wagesSuper: cents(o.wagesSuper), overheads: cents(o.overheads),
+    byLoc: { windsor: { revenue: cents(o.wr), cogs: cents(o.wc) }, richmond: { revenue: cents(o.rr), cogs: cents(o.rc) } }
+  }));
 }
 
 /* Map each report column to a YYYY-MM using the header date labels. */
@@ -362,12 +372,17 @@ async function xeroFetchMonthly(env, h, q) {
   const pool = [];
   for (let i = 0; i < Math.min(CONC, months.length); i++) pool.push(run());
   await Promise.all(pool);
+  const loc = (m, shop, field) => (result[m] && result[m].byLoc && result[m].byLoc[shop]) ? result[m].byLoc[shop][field] : null;
   return {
     months: months,
     revenue: months.map((m) => (result[m] ? result[m].revenue : null)),
     cogs: months.map((m) => (result[m] ? result[m].cogs : null)),
     wagesSuper: months.map((m) => (result[m] ? result[m].wagesSuper : null)),
-    overheads: months.map((m) => (result[m] ? result[m].overheads : null))
+    overheads: months.map((m) => (result[m] ? result[m].overheads : null)),
+    revenue_windsor: months.map((m) => loc(m, 'windsor', 'revenue')),
+    cogs_windsor: months.map((m) => loc(m, 'windsor', 'cogs')),
+    revenue_richmond: months.map((m) => loc(m, 'richmond', 'revenue')),
+    cogs_richmond: months.map((m) => loc(m, 'richmond', 'cogs'))
   };
 }
 
@@ -422,7 +437,7 @@ async function squareStatus(env, h) {
 /* Read per-day pos counts from KV in parallel batches (fast, no sequential
    stalls). Returns a date->count map and how many days had stored data. */
 async function posReadDays(env, dates) {
-  const map = {};
+  const rows = {};
   let days = 0;
   const CH = 50;
   for (let i = 0; i < dates.length; i += CH) {
@@ -431,11 +446,11 @@ async function posReadDays(env, dates) {
     for (let j = 0; j < batch.length; j++) {
       if (vals[j] != null) {
         days++;
-        try { map[batch[j]] = (JSON.parse(vals[j]).count) || 0; } catch (e) { map[batch[j]] = 0; }
+        try { rows[batch[j]] = JSON.parse(vals[j]) || {}; } catch (e) { rows[batch[j]] = {}; }
       }
     }
   }
-  return { map, days };
+  return { rows, days };
 }
 function datesBetween(from, to) {
   const out = [];
@@ -443,11 +458,14 @@ function datesBetween(from, to) {
   while (d <= to && out.length < 800) { out.push(d); d = addDaysStr(d, 1); }
   return out;
 }
+const numOr0 = (v) => (typeof v === 'number' && isFinite(v)) ? v : 0;
 
 async function squareRange(env, h, q) {
-  const { map, days } = await posReadDays(env, datesBetween(q.from, q.to));
-  if (!days) return { count: null }; /* not synced yet -> honest gap, not a false 0 */
-  return { count: Object.values(map).reduce((a, b) => a + b, 0) };
+  const { rows, days } = await posReadDays(env, datesBetween(q.from, q.to));
+  if (!days) return { count: null, byLoc: { windsor: { count: null }, richmond: { count: null } } };
+  let c = 0, w = 0, r = 0;
+  for (const d in rows) { c += numOr0(rows[d].count); w += numOr0(rows[d].windsor); r += numOr0(rows[d].richmond); }
+  return { count: c, byLoc: { windsor: { count: w }, richmond: { count: r } } };
 }
 
 async function squareMonthly(env, h, q) {
@@ -459,10 +477,15 @@ async function squareMonthly(env, h, q) {
     const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
     for (let dd = 1; dd <= last; dd++) { const ds = mo + '-' + String(dd).padStart(2, '0'); allDates.push(ds); monthOf[ds] = mo; }
   }
-  const { map } = await posReadDays(env, allDates);
-  const sums = {}, has = {};
-  for (const ds of Object.keys(map)) { const mo = monthOf[ds]; sums[mo] = (sums[mo] || 0) + map[ds]; has[mo] = true; }
-  return { months: months, count: months.map((mo) => (has[mo] ? sums[mo] : null)) };
+  const { rows } = await posReadDays(env, allDates);
+  const c = {}, w = {}, r = {}, has = {};
+  for (const ds in rows) { const mo = monthOf[ds]; c[mo] = (c[mo] || 0) + numOr0(rows[ds].count); w[mo] = (w[mo] || 0) + numOr0(rows[ds].windsor); r[mo] = (r[mo] || 0) + numOr0(rows[ds].richmond); has[mo] = true; }
+  return {
+    months: months,
+    count: months.map((mo) => (has[mo] ? c[mo] : null)),
+    count_windsor: months.map((mo) => (has[mo] ? w[mo] : null)),
+    count_richmond: months.map((mo) => (has[mo] ? r[mo] : null))
+  };
 }
 
 /* Count COMPLETED payments for a set of whole Sydney days and store per-day.
@@ -474,14 +497,15 @@ async function squareTallyDates(env, h, dates, pageCap) {
   const sorted = dates.slice().sort();
   const beginUtc = addDaysStr(sorted[0], -1) + 'T00:00:00Z';
   const endUtc = addDaysStr(sorted[sorted.length - 1], 2) + 'T00:00:00Z';
-  const counts = {};
-  for (const d of dates) counts[d] = 0;
+  const counts = {}, win = {}, rich = {};
+  for (const d of dates) { counts[d] = 0; win[d] = 0; rich[d] = 0; }
   /* Count every active location (Windsor + Richmond) — ListPayments without a
-     location_id only returns the main location, which was undercounting. */
+     location_id only returns the main location — and split the tally per shop. */
   const active = (await squareLocations(env)).filter((l) => (l.status || 'ACTIVE') === 'ACTIVE');
-  const locIds = active.map((l) => l.id).filter(Boolean);
-  const targets = locIds.length ? locIds : [null];
-  for (const locId of targets) {
+  const targets = active.length ? active : [{ id: null, name: '' }];
+  for (const locObj of targets) {
+    const locId = locObj.id;
+    const slug = locSlug(locObj.name || '');
     let cursor = null, pages = 0;
     do {
       let path = '/v2/payments?sort_order=ASC&limit=100&begin_time=' + encodeURIComponent(beginUtc) + '&end_time=' + encodeURIComponent(endUtc);
@@ -491,18 +515,20 @@ async function squareTallyDates(env, h, dates, pageCap) {
       for (const p of (data.payments || [])) {
         if ((p.status || '') !== 'COMPLETED') continue;
         const d = sydDate(p.created_at);
-        if (want.has(d)) counts[d]++;
+        if (!want.has(d)) continue;
+        counts[d]++;
+        if (slug === 'windsor') win[d]++; else if (slug === 'richmond') rich[d]++;
       }
       cursor = data.cursor || null;
       pages++;
     } while (cursor && pages < (pageCap || 40));
   }
-  await h.saveIngestedRows(dates.map((d) => ({ date: d, count: counts[d] || 0 })));
+  await h.saveIngestedRows(dates.map((d) => ({ date: d, count: counts[d] || 0, windsor: win[d] || 0, richmond: rich[d] || 0 })));
 }
 
 /* Scheduled tally: keep the last few days fresh, then backfill history in
    20-day chunks moving backward until ~25 months are covered. */
-const POS_SYNC_VER = 'loc2'; /* bump to force a full history re-walk after a counting change */
+const POS_SYNC_VER = 'loc3'; /* bump to force a full history re-walk after a counting change (now per-shop) */
 
 async function squareSync(env, h) {
   if (!squareToken(env)) return;
