@@ -337,6 +337,11 @@ var MANUAL = loadJson('vd_manual', {});        /* rangeKey -> { from,to,period,v
 function saveRecon() { try { localStorage.setItem('vd_recon', JSON.stringify(RECON)); } catch (e) {} }
 function saveOrgOk() { try { localStorage.setItem('vd_orgok', JSON.stringify(ORG_OK)); } catch (e) {} }
 function saveManual() { try { localStorage.setItem('vd_manual', JSON.stringify(MANUAL)); } catch (e) {} }
+/* Per-period owner-entered figures overlaid on LIVE data (hybrid): rangeKey ->
+   { revenue?, cogs? }. Wages (Xero) and transactions (Square) stay live; these
+   attested figures replace just the fields the owner types, badged "Entered by you". */
+var OVERRIDES = loadJson('vd_overrides', {});
+function saveOverrides() { try { localStorage.setItem('vd_overrides', JSON.stringify(OVERRIDES)); } catch (e) {} }
 function isManual() { return SETTINGS.dataMode === 'manual'; }
 function rangeKey(from, to) { return iso(from) + '_' + iso(to); }
 
@@ -595,9 +600,37 @@ function periodValues(slot) {  /* slot: 'cur' | 'prev' | 'yoy' */
   }
   if (pos) out.count = num(pos.count);
   if (ros) out.rosteredCost = num(ros.cost);
+  /* Overlay owner-entered figures (hybrid live+manual), by this slot's dates. */
+  if (!isManual()) {
+    var rr = resolvePeriod(state.period, state.customFrom, state.customTo);
+    var rng = slot === 'cur' ? { from: rr.from, to: rr.to } : (slot === 'prev' ? rr.prev : (slot === 'yoy' ? rr.yoy : null));
+    var ov = rng ? OVERRIDES[rangeKey(rng.from, rng.to)] : null;
+    if (ov) {
+      out._manual = {};
+      if (typeof ov.revenue === 'number' && isFinite(ov.revenue)) { out.revenue = ov.revenue; out._manual.revenue = true; }
+      if (typeof ov.cogs === 'number' && isFinite(ov.cogs)) { out.cogs = ov.cogs; out._manual.cogs = true; }
+    }
+  }
   return out;
 }
 function num(v) { return (typeof v === 'number' && isFinite(v)) ? v : null; }
+/* Which cards should read as owner-entered for a slot's values. */
+function usesManual(key, vals) {
+  var m = vals && vals._manual;
+  if (!m) return false;
+  if (key === 'revenue') return !!m.revenue;
+  if (key === 'cogs') return !!m.cogs;
+  if (key === 'transactions') return false;
+  if (key === 'profit') return !!(m.revenue || m.cogs);
+  return !!m.revenue; /* acs, wage, overheads all divide by revenue */
+}
+function parseMoneyInput(s) {
+  if (s == null) return null;
+  var t = String(s).replace(/[^0-9.\-]/g, '');
+  if (t === '') return null;
+  var n = parseFloat(t);
+  return isFinite(n) ? n : null;
+}
 
 /* Profit = Revenue − Cost of Sales − (wages+super) − Overheads, for the period.
    Needs all four; a missing component returns null (never a part-figure). */
@@ -870,6 +903,8 @@ function renderDashboard(root) {
 
   root.appendChild(el('div', 'period-heading', periodLabel() + ' <span>· ' + fmtRange(r) + '</span>'));
 
+  if (!isManual()) root.appendChild(overridePanel(r));
+
   if (isManual() && !manualEntry({ from: r.from, to: r.to })) {
     var mb = el('div', 'banner banner-amber');
     mb.innerHTML = '<b>No numbers entered for this period yet.</b> Add them and your dashboard fills in straight away.';
@@ -893,6 +928,60 @@ function periodLabel() {
   return p ? p.label.replace('…', '') : '';
 }
 
+/* Hybrid entry: type Revenue / Cost of goods for this period; they overlay the
+   live data (wages + transactions stay live) and are badged "Entered by you". */
+function overridePanel(r) {
+  var key = rangeKey(r.from, r.to);
+  var ov = OVERRIDES[key] || {};
+  var has = !!OVERRIDES[key];
+  var det = document.createElement('details');
+  det.style.cssText = 'background:var(--cream2);border:1px solid var(--border);border-radius:12px;padding:10px 14px;margin:0 0 14px;font-size:13px';
+  var sum = document.createElement('summary');
+  sum.style.cssText = 'cursor:pointer;font-weight:500;color:var(--black)';
+  sum.textContent = (has ? '✎ Your figures for ' : '✎ Enter your own Revenue / Cost of goods for ') + periodLabel().toLowerCase() + (has ? ' — edit' : ' (optional)');
+  det.appendChild(sum);
+
+  var hint = el('div', null, 'Type your Revenue and Cost of goods for this period and the board uses them, marked “Entered by you.” Wages and transactions stay live. Leave a box blank to keep using Xero for it.');
+  hint.style.cssText = 'color:var(--muted);margin:8px 0 10px;line-height:1.6';
+  det.appendChild(hint);
+
+  function field(labelText, val) {
+    var wrap = document.createElement('label');
+    wrap.style.cssText = 'display:inline-flex;flex-direction:column;gap:4px;margin:0 14px 8px 0;font-size:12px;color:var(--muted)';
+    var sp = document.createElement('span'); sp.textContent = labelText; wrap.appendChild(sp);
+    var inp = document.createElement('input');
+    inp.type = 'text'; inp.inputMode = 'decimal';
+    inp.value = (typeof val === 'number') ? String(val) : '';
+    inp.placeholder = '$';
+    inp.style.cssText = 'font-family:inherit;font-size:15px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;width:150px;background:#fff;color:var(--text);box-sizing:border-box';
+    wrap.appendChild(inp);
+    return inp;
+  }
+  var revIn = field('Revenue (ex-GST)', ov.revenue);
+  var cogIn = field('Cost of goods', ov.cogs);
+  var row = el('div'); row.style.cssText = 'display:flex;flex-wrap:wrap;align-items:flex-end';
+  row.appendChild(revIn.parentNode); row.appendChild(cogIn.parentNode);
+  det.appendChild(row);
+
+  var actions = el('div'); actions.style.cssText = 'margin-top:4px;display:flex;gap:10px;align-items:center';
+  var save = el('button', 'btn-small', 'Save my figures');
+  save.onclick = function () {
+    var o = {};
+    var rv = parseMoneyInput(revIn.value); if (rv != null) o.revenue = rv;
+    var cv = parseMoneyInput(cogIn.value); if (cv != null) o.cogs = cv;
+    if (Object.keys(o).length) OVERRIDES[key] = o; else delete OVERRIDES[key];
+    saveOverrides(); render();
+  };
+  actions.appendChild(save);
+  if (has) {
+    var clr = el('button', 'btn-plain', 'Clear (use Xero)');
+    clr.onclick = function () { delete OVERRIDES[key]; saveOverrides(); render(); };
+    actions.appendChild(clr);
+  }
+  det.appendChild(actions);
+  return det;
+}
+
 function metricCard(key, cur, prev, yoy, r) {
   var def = METRIC_DEFS[key];
   var ready = def.needs.every(isConfigured);
@@ -911,6 +1000,8 @@ function metricCard(key, cur, prev, yoy, r) {
 
   if (state.data && state.data.manual) {
     if (manualEntry({ from: r.from, to: r.to })) card.appendChild(el('span', 'm-tag tag-manual', 'Entered by you'));
+  } else if (usesManual(key, cur)) {
+    card.appendChild(el('span', 'm-tag tag-manual', 'Entered by you'));
   } else if (RECON[key] === 'flagged') {
     card.className += ' needs-check';
     card.appendChild(el('span', 'm-tag tag-check', 'Needs checking'));
