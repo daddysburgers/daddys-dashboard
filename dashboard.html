@@ -99,6 +99,20 @@ body {
 }
 .pchip:hover { border-color: var(--accent); background: var(--accent-dim); }
 .pchip.on { background: var(--black); color: #fff; border-color: var(--black); font-weight: 500; }
+.period-nav { display: flex; align-items: center; gap: 10px; margin: 2px 0 0.6rem; }
+.nav-arrow {
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border-med); background: #fffdf9;
+  color: var(--text); font-size: 17px; line-height: 1; cursor: pointer; transition: all .15s;
+  display: flex; align-items: center; justify-content: center; font-family: 'DM Sans', sans-serif;
+}
+.nav-arrow:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-dim); }
+.nav-arrow:disabled { opacity: 0.35; cursor: default; }
+.nav-current { font-size: 13px; color: var(--muted); font-weight: 500; }
+.nav-today {
+  font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500; padding: 6px 13px;
+  border-radius: 50px; border: 1px solid var(--border-med); background: transparent; color: var(--text); cursor: pointer;
+}
+.nav-today:hover { border-color: var(--accent); background: var(--accent-dim); }
 .custom-wrap { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 0.5rem 0; }
 .custom-wrap input[type=date] {
   font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 7px 10px;
@@ -306,7 +320,7 @@ var ACCENTS = [
 function defaultSettings() {
   return {
     venueName: 'Your venue',
-    defaultPeriod: 'thisMonth',
+    defaultPeriod: 'month:0',
     weekStart: 1,            /* 1 = Monday */
     rolloverHour: 0,         /* sales before this hour count to the previous trading day */
     timezone: TZ_DEFAULTS[KIT_CONFIG.region] || 'Australia/Sydney',
@@ -323,6 +337,7 @@ function loadSettings() {
     var s = JSON.parse(raw);
     var d = defaultSettings();
     for (var k in d) { if (!(k in s)) s[k] = d[k]; }
+    if (s.defaultPeriod) s.defaultPeriod = normalizePeriodKey(s.defaultPeriod);
     return s;
   } catch (e) { return defaultSettings(); }
 }
@@ -419,51 +434,74 @@ function fyStart(forDate) {
   return (forDate.getTime() >= thisYears.getTime()) ? thisYears : stamp(y - 1, sm, 1);
 }
 
-var PERIODS = [
-  { key: 'thisWeek',  label: 'This week' },
-  { key: 'lastWeek',  label: 'Last week' },
-  { key: 'thisMonth', label: 'This month' },
-  { key: 'lastMonth', label: 'Last month' },
-  { key: 'thisFY',    label: 'This financial year' },
-  { key: 'lastFY',    label: 'Last financial year' },
-  { key: 'custom',    label: 'Custom…' }
+/* Period keys are "<type>:<offset>" (e.g. "week:0" = this week, "week:-1" =
+   last week, "quarter:-2" = two quarters ago) or the literal "custom". offset
+   0 is always the current, in-progress period; offset must never be positive
+   (no future periods) - the UI clamps the "next" arrow at 0. */
+var PERIOD_TYPES = [
+  { type: 'week',    label: 'Week' },
+  { type: 'month',   label: 'Month' },
+  { type: 'quarter', label: 'Quarter' },
+  { type: 'fy',      label: 'Financial year' },
+  { type: 'custom',  label: 'Custom…' }
 ];
+/* Pre-refresh saved settings/entries used flat keys like "thisWeek" - map them
+   onto the new type:offset scheme so nothing already saved on Kane's browser breaks. */
+var LEGACY_PERIOD_MAP = { thisWeek: 'week:0', lastWeek: 'week:-1', thisMonth: 'month:0', lastMonth: 'month:-1', thisFY: 'fy:0', lastFY: 'fy:-1' };
+function normalizePeriodKey(key) { return LEGACY_PERIOD_MAP[key] || key || 'week:0'; }
+function periodParts(key) {
+  key = normalizePeriodKey(key);
+  var i = key.indexOf(':');
+  if (i < 0) return { type: key, offset: 0 };
+  return { type: key.slice(0, i), offset: parseInt(key.slice(i + 1), 10) || 0 };
+}
+function periodKey(type, offset) { return type + ':' + offset; }
+function quarterStart(forDate) {
+  var q = Math.floor(forDate.getUTCMonth() / 3) * 3;   /* 0, 3, 6, 9 - calendar quarters */
+  return stamp(forDate.getUTCFullYear(), q + 1, 1);
+}
 
-/* Returns { from, to, prev:{from,to}, yoy:{from,to}|null, label, prevLabel, yoyLabel } */
+/* Returns { from, to, prev:{from,to}, yoy:{from,to}|null, prevLabel, yoyLabel } */
 function resolvePeriod(key, customFrom, customTo) {
   var today = tradingToday();
   var from, to, prev, yoy, prevLabel, yoyLabel;
-  if (key === 'thisWeek' || key === 'lastWeek') {
-    var ws = startOfWeek(today);
-    if (key === 'lastWeek') ws = addDays(ws, -7);
-    from = ws; to = (key === 'thisWeek') ? today : addDays(ws, 6);
+  var pp = periodParts(key);
+  var type = pp.type, offset = pp.offset;
+
+  if (type === 'week') {
+    var ws = addDays(startOfWeek(today), offset * 7);
+    from = ws; to = (offset === 0) ? today : addDays(ws, 6);
     prev = { from: addDays(from, -7), to: addDays(to, -7) };
     yoy = { from: addDays(from, -364), to: addDays(to, -364) };   /* weekday-aligned */
     prevLabel = 'vs week before'; yoyLabel = 'vs same week last year';
-  } else if (key === 'thisMonth' || key === 'lastMonth') {
-    var base = (key === 'thisMonth') ? today : addMonths(stamp(today.getUTCFullYear(), today.getUTCMonth() + 1, 1), -1);
-    from = stamp(base.getUTCFullYear(), base.getUTCMonth() + 1, 1);
+  } else if (type === 'month') {
+    from = addMonths(stamp(today.getUTCFullYear(), today.getUTCMonth() + 1, 1), offset);
     var endOfMonth = addDays(addMonths(from, 1), -1);
-    to = (key === 'thisMonth') ? today : endOfMonth;
+    to = (offset === 0) ? today : endOfMonth;
     var pf = addMonths(from, -1);
-    var pt = (key === 'thisMonth') ? addDays(addMonths(to, -1), 0) : addDays(addMonths(from, 0), -1);
-    if (key === 'thisMonth') { if (pt.getTime() < pf.getTime()) pt = pf; prev = { from: pf, to: pt }; }
-    else prev = { from: pf, to: addDays(from, -1) };
+    var pt = (offset === 0) ? addMonths(to, -1) : addDays(from, -1);
+    if (offset === 0 && pt.getTime() < pf.getTime()) pt = pf;
+    prev = { from: pf, to: pt };
     yoy = { from: addYears(from, -1), to: addYears(to, -1) };
     prevLabel = 'vs month before'; yoyLabel = 'vs same month last year';
-  } else if (key === 'thisFY') {
-    from = fyStart(today); to = today;
-    prev = { from: addYears(from, -1), to: addYears(to, -1) };    /* last FY to the same date */
+  } else if (type === 'quarter') {
+    from = addMonths(quarterStart(today), offset * 3);
+    var endOfQuarter = addDays(addMonths(from, 3), -1);
+    to = (offset === 0) ? today : endOfQuarter;
+    var pqf = addMonths(from, -3);
+    var pqt = (offset === 0) ? addMonths(to, -3) : addDays(from, -1);
+    if (offset === 0 && pqt.getTime() < pqf.getTime()) pqt = pqf;
+    prev = { from: pqf, to: pqt };
+    yoy = { from: addYears(from, -1), to: addYears(to, -1) };
+    prevLabel = 'vs quarter before'; yoyLabel = 'vs same quarter last year';
+  } else if (type === 'fy') {
+    from = addYears(fyStart(today), offset);
+    to = (offset === 0) ? today : addDays(addYears(from, 1), -1);
+    prev = { from: addYears(from, -1), to: addYears(to, -1) };
     yoy = null;
-    prevLabel = 'vs last financial year to the same date'; yoyLabel = null;
-  } else if (key === 'lastFY') {
-    var curStart = fyStart(today);
-    from = addYears(curStart, -1); to = addDays(curStart, -1);
-    prev = { from: addYears(from, -1), to: addDays(from, -1) };
-    yoy = null;
-    prevLabel = 'vs the financial year before'; yoyLabel = null;
+    prevLabel = (offset === 0) ? 'vs last financial year to the same date' : 'vs the financial year before'; yoyLabel = null;
   } else { /* custom */
-    if (!customFrom || !customTo) return resolvePeriod('thisWeek');
+    if (!customFrom || !customTo) return resolvePeriod('week:0');
     from = fromIso(customFrom); to = fromIso(customTo);
     if (to.getTime() < from.getTime()) { var sw = from; from = to; to = sw; }
     var len = Math.round((to.getTime() - from.getTime()) / 86400000) + 1;
@@ -472,6 +510,36 @@ function resolvePeriod(key, customFrom, customTo) {
     prevLabel = 'vs the ' + len + ' days before'; yoyLabel = 'vs same dates last year';
   }
   return { from: from, to: to, prev: prev, yoy: yoy, prevLabel: prevLabel, yoyLabel: yoyLabel };
+}
+
+var MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function fyLabelFull(r) { return 'FY' + (r.from.getUTCFullYear() + (KIT_CONFIG.fyStartMonth > 1 ? 1 : 0)); }
+
+/* Human label for a period key - defaults to the currently selected one. */
+function periodLabel(key) {
+  key = key || state.period;
+  var pp = periodParts(key);
+  if (pp.type === 'custom') return 'Custom range';
+  var r = resolvePeriod(key, state.customFrom, state.customTo);
+  if (pp.type === 'week') return pp.offset === 0 ? 'This week' : (pp.offset === -1 ? 'Last week' : fmtRange(r));
+  if (pp.type === 'month') {
+    if (pp.offset === 0) return 'This month';
+    if (pp.offset === -1) return 'Last month';
+    return MONTH_NAMES[r.from.getUTCMonth()] + ' ' + r.from.getUTCFullYear();
+  }
+  if (pp.type === 'quarter') {
+    var q = Math.floor(r.from.getUTCMonth() / 3) + 1;
+    var qLab = 'Q' + q + ' ' + r.from.getUTCFullYear();
+    if (pp.offset === 0) return 'This quarter (' + qLab + ')';
+    if (pp.offset === -1) return 'Last quarter (' + qLab + ')';
+    return qLab;
+  }
+  if (pp.type === 'fy') {
+    if (pp.offset === 0) return 'This financial year (' + fyLabelFull(r) + ')';
+    if (pp.offset === -1) return 'Last financial year (' + fyLabelFull(r) + ')';
+    return fyLabelFull(r);
+  }
+  return '';
 }
 
 function fmtRange(r) {
@@ -487,7 +555,7 @@ function fmtRange(r) {
 ============================================================ */
 var state = {
   view: 'dashboard',           /* dashboard | connections | recon | settings */
-  period: SETTINGS.defaultPeriod === 'custom' ? 'thisWeek' : SETTINGS.defaultPeriod,
+  period: SETTINGS.defaultPeriod === 'custom' ? 'week:0' : normalizePeriodKey(SETTINGS.defaultPeriod),
   customFrom: null, customTo: null,
   loading: false,
   data: null,                  /* last /api/metrics payload */
@@ -523,7 +591,7 @@ function buildManualTrend() {
   var byMonth = {};
   for (var k in MANUAL) {
     var e = MANUAL[k];
-    if (e && (e.period === 'thisMonth' || e.period === 'lastMonth')) byMonth[e.from.slice(0, 7)] = e.values || {};
+    if (e && periodParts(e.period).type === 'month') byMonth[e.from.slice(0, 7)] = e.values || {};
   }
   var end = tradingToday();
   var months = [];
@@ -880,19 +948,43 @@ function esc(s) {
 /* ---------- Dashboard view ---------- */
 function renderDashboard(root) {
   var r = resolvePeriod(state.period, state.customFrom, state.customTo);
+  var pp = periodParts(state.period);
 
-  /* Period selector */
+  /* Period selector: pick a period type, then step through it week-to-week
+     (or month/quarter/year-to-year) with the arrows - no date typing needed
+     unless you want a custom range. */
   var bar = el('div', 'period-bar');
   bar.appendChild(el('span', 'period-label', 'Period'));
-  PERIODS.forEach(function (p) {
-    var c = el('button', 'pchip' + (state.period === p.key ? ' on' : ''), p.label);
+  PERIOD_TYPES.forEach(function (pt) {
+    var c = el('button', 'pchip' + (pp.type === pt.type ? ' on' : ''), pt.label);
     c.onclick = function () {
-      if (p.key === 'custom') { state.period = 'custom'; render(); return; }
-      state.period = p.key; fetchData();
+      if (pt.type === 'custom') { state.period = 'custom'; render(); return; }
+      state.period = periodKey(pt.type, 0); fetchData();
     };
     bar.appendChild(c);
   });
   root.appendChild(bar);
+
+  if (pp.type !== 'custom') {
+    var nav = el('div', 'period-nav');
+    var prevBtn = el('button', 'nav-arrow', '‹');
+    prevBtn.title = 'Previous ' + pp.type;
+    prevBtn.onclick = function () { state.period = periodKey(pp.type, pp.offset - 1); fetchData(); };
+    nav.appendChild(prevBtn);
+    if (pp.offset !== 0) {
+      var todayBtn = el('button', 'nav-today', 'Jump to current');
+      todayBtn.onclick = function () { state.period = periodKey(pp.type, 0); fetchData(); };
+      nav.appendChild(todayBtn);
+    } else {
+      nav.appendChild(el('span', 'nav-current', 'Current ' + pp.type));
+    }
+    var nextBtn = el('button', 'nav-arrow', '›');
+    nextBtn.title = 'Next ' + pp.type;
+    nextBtn.disabled = pp.offset >= 0;
+    nextBtn.onclick = function () { if (pp.offset < 0) { state.period = periodKey(pp.type, pp.offset + 1); fetchData(); } };
+    nav.appendChild(nextBtn);
+    root.appendChild(nav);
+  }
 
   /* Shop selector — flip the whole board to one shop or the combined total. */
   var lbar = el('div', 'period-bar');
@@ -904,7 +996,7 @@ function renderDashboard(root) {
   });
   root.appendChild(lbar);
 
-  if (state.period === 'custom') {
+  if (pp.type === 'custom') {
     var cw = el('div', 'custom-wrap');
     var f = document.createElement('input'); f.type = 'date'; f.id = 'cfrom'; if (state.customFrom) f.value = state.customFrom;
     var t = document.createElement('input'); t.type = 'date'; t.id = 'cto'; if (state.customTo) t.value = state.customTo;
@@ -966,11 +1058,6 @@ function renderDashboard(root) {
   CHOSEN.filter(function (k) { return curLoc() === 'combined' || shopMetrics.indexOf(k) >= 0; })
     .forEach(function (k) { grid.appendChild(metricCard(k, cur, prev, yoy, r)); });
   root.appendChild(grid);
-}
-
-function periodLabel() {
-  var p = PERIODS.filter(function (x) { return x.key === state.period; })[0];
-  return p ? p.label.replace('…', '') : '';
 }
 
 /* Hybrid entry: type Revenue / Cost of goods for this period; they overlay the
@@ -1201,7 +1288,7 @@ function targetMeter(key, pf) {
 /* Revenue benchmark: this period vs the trailing monthly average. Shown only for
    single-month periods, where the monthly history is a like-for-like comparison. */
 function revenueBenchmark(cur) {
-  if (state.period !== 'thisMonth' && state.period !== 'lastMonth') return null;
+  if (periodParts(state.period).type !== 'month') return null;
   var rev = cur.revenue;
   if (rev == null) return null;
   var t = trendSeries('revenue');
@@ -1543,17 +1630,29 @@ function renderManualEntry(root) {
   root.appendChild(el('div', 'screen-title', 'Enter your numbers'));
   root.appendChild(el('p', 'screen-sub', 'Type the figures from your own profit and loss and POS report. No accounts to connect and no code. Your dashboard fills in the moment you save, and it takes a couple of minutes each week.'));
 
-  var ep = state.enterPeriod || (state.period === 'custom' ? 'lastWeek' : state.period);
+  var ep = normalizePeriodKey(state.enterPeriod || (state.period === 'custom' ? 'week:-1' : state.period));
   state.enterPeriod = ep;
+  var epp = periodParts(ep);
   var pbar = el('div', 'period-bar');
   pbar.appendChild(el('span', 'period-label', 'Which dates'));
-  PERIODS.forEach(function (p) {
-    if (p.key === 'custom') return;
-    var c = el('button', 'pchip' + (ep === p.key ? ' on' : ''), p.label);
-    c.onclick = function () { state.enterPeriod = p.key; render(); };
+  PERIOD_TYPES.forEach(function (pt) {
+    if (pt.type === 'custom') return;
+    var c = el('button', 'pchip' + (epp.type === pt.type ? ' on' : ''), pt.label);
+    c.onclick = function () { state.enterPeriod = periodKey(pt.type, epp.type === pt.type ? epp.offset : (pt.type === 'week' ? -1 : 0)); render(); };
     pbar.appendChild(c);
   });
   root.appendChild(pbar);
+
+  var enav = el('div', 'period-nav');
+  var ePrev = el('button', 'nav-arrow', '‹');
+  ePrev.onclick = function () { state.enterPeriod = periodKey(epp.type, epp.offset - 1); render(); };
+  enav.appendChild(ePrev);
+  enav.appendChild(el('span', 'nav-current', periodLabel(ep)));
+  var eNext = el('button', 'nav-arrow', '›');
+  eNext.disabled = epp.offset >= 0;
+  eNext.onclick = function () { if (epp.offset < 0) { state.enterPeriod = periodKey(epp.type, epp.offset + 1); render(); } };
+  enav.appendChild(eNext);
+  root.appendChild(enav);
 
   var r = resolvePeriod(ep);
   root.appendChild(el('p', 'manual-dates', 'You are entering numbers for ' + fmtRange(r) + '.'));
@@ -1645,10 +1744,11 @@ function renderSettings(root) {
   var c2 = el('div', 'set-cell');
   c2.appendChild(el('div', 'set-label', 'Default period'));
   var sel = document.createElement('select');
-  PERIODS.forEach(function (p) {
-    if (p.key === 'custom') return;
-    var o = document.createElement('option'); o.value = p.key; o.textContent = p.label;
-    if (SETTINGS.defaultPeriod === p.key) o.selected = true;
+  PERIOD_TYPES.forEach(function (pt) {
+    if (pt.type === 'custom') return;
+    var k = periodKey(pt.type, 0);
+    var o = document.createElement('option'); o.value = k; o.textContent = 'This ' + pt.label.toLowerCase();
+    if (normalizePeriodKey(SETTINGS.defaultPeriod) === k) o.selected = true;
     sel.appendChild(o);
   });
   sel.onchange = function () { SETTINGS.defaultPeriod = sel.value; saveSettings(); };
@@ -1746,7 +1846,7 @@ function renderSettings(root) {
 /* ============================================================
    Boot
 ============================================================ */
-state.period = SETTINGS.defaultPeriod || 'thisWeek';
+state.period = normalizePeriodKey(SETTINGS.defaultPeriod) || 'week:0';
 render();
 fetchData();
 </script>
