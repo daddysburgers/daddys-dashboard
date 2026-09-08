@@ -1297,13 +1297,15 @@ function managerSparkRow(key, loc, r) {
   /* Match the mini-trend's granularity to whatever period is selected: Week
      shows the last few weeks, everything else (Month/Quarter/FY) shows months -
      the one thing Kane specifically asked to have line up. */
-  var granularity = periodParts(state.period).type === 'week' ? 'weekly' : 'monthly';
+  var weekly = periodParts(state.period).type === 'week';
+  var granularity = weekly ? 'weekly' : 'monthly';
   var series = trendSeries(key, loc, granularity);
   var row = el('div', 'mgr-row');
   row.appendChild(el('div', 'mgr-lab', esc(METRIC_DEFS[key].label)));
   var viz = el('div', 'mgr-viz');
   if (series && series.values.some(function (x) { return x != null; })) {
     var vals = series.values.slice(-8);
+    var labs = series.months.slice(-8);
     var max = Math.max.apply(null, vals.filter(function (x) { return x != null; }).concat([0]));
     var spark = el('div', 'mgr-spark');
     vals.forEach(function (v, i) {
@@ -1311,8 +1313,11 @@ function managerSparkRow(key, loc, r) {
       var h = (v == null || !(max > 0)) ? 2 : Math.max(2, Math.round((v / max) * 100));
       bar.style.height = h + '%';
       if (i === vals.length - 1) bar.className = 'cur';
+      var lab = weekly ? ('wk of ' + fmtShortDate(fromIso(labs[i]))) : labs[i];
+      bar.setAttribute('data-lab', lab + ' · ' + (v == null ? 'no data' : trendLabel(key, v)));
       spark.appendChild(bar);
     });
+    attachBarTip(spark);
     viz.appendChild(spark);
   } else {
     viz.appendChild(el('span', 'flat', 'Not enough history yet'));
