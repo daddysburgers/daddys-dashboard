@@ -168,6 +168,7 @@ body {
 .m-value { font-family: 'Khand', sans-serif; font-size: 42px; font-weight: 700; color: var(--black); line-height: 1; margin-bottom: 0.15rem; }
 .m-value.dim { color: var(--muted); font-size: 30px; }
 .m-sub { font-size: 13px; color: var(--muted); margin-bottom: 0.55rem; }
+.m-sub.warn { color: var(--c-amber); }
 .m-def { font-size: 12px; color: var(--muted); font-weight: 300; line-height: 1.55; border-top: 1px solid var(--border); padding-top: 0.55rem; margin-top: 0.55rem; }
 .m-tag { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; padding: 3px 9px; border-radius: 4px; margin-bottom: 8px; }
 .tag-check { background: var(--c-coral-bg); color: var(--c-coral); border: 1px solid var(--c-coral-border); }
@@ -840,10 +841,20 @@ function parseMoneyInput(s) {
 }
 
 /* Profit = Revenue − Cost of Sales − (wages+super) − Overheads, for the period.
-   Needs all four; a missing component returns null (never a part-figure). */
+   Revenue/Cost of goods/Wages+super are hard requirements - missing any of
+   those returns null (never a part-figure guessed from what IS there).
+   Overheads is the one exception: when it hasn't come through (still the
+   most likely of the four to be briefly unavailable, since it can't be
+   entered manually the way Revenue/Cost of goods can), Profit still shows,
+   treating overheads as 0 for that period - profitExcludesOverheads() below
+   flags exactly when that happened so the card can say so, rather than
+   quietly showing a profit figure that's actually overstated. */
 function profitDollars(vals) {
-  if (vals.revenue == null || vals.cogs == null || vals.wagesSuper == null || vals.overheads == null) return null;
-  return vals.revenue - vals.cogs - vals.wagesSuper - vals.overheads;
+  if (vals.revenue == null || vals.cogs == null || vals.wagesSuper == null) return null;
+  return vals.revenue - vals.cogs - vals.wagesSuper - (vals.overheads || 0);
+}
+function profitExcludesOverheads(vals) {
+  return vals.revenue != null && vals.cogs != null && vals.wagesSuper != null && vals.overheads == null;
 }
 /* The dollar amount behind a dual (share-of-revenue) metric. */
 function shareDollars(key, vals) {
@@ -1327,6 +1338,7 @@ function managerMeterRow(key, cur) {
   var row = el('div', 'mgr-row');
   var over = METRIC_DEFS[key].goodDir === 'down';
   var tgtTxt = t == null ? '' : (over ? 'target ≤' : 'target ≥') + fmtTarget(key, t);
+  if (key === 'profit' && profitExcludesOverheads(cur)) tgtTxt += (tgtTxt ? ' · ' : '') + 'excludes overheads (not in yet)';
   row.appendChild(el('div', 'mgr-lab', esc(METRIC_DEFS[key].label) + (tgtTxt ? '<span class="tgt">' + esc(tgtTxt) + '</span>' : '')));
   var viz = el('div', 'mgr-viz');
   var meter = targetMeter(key, pf);
@@ -1584,6 +1596,9 @@ function metricCard(key, cur, prev, yoy, r) {
       var ps = el('div', 'm-sub');
       ps.innerHTML = '<span class="m-tag tag-proj" style="margin:0 6px 0 0">Projected</span>' + pj + '% from ' + esc(P.rostering) + ' roster';
       card.appendChild(ps);
+    }
+    if (key === 'profit' && profitExcludesOverheads(cur)) {
+      card.appendChild(el('div', 'm-sub warn', 'Overheads haven’t come through for this period yet — this figure leaves them out, so real profit will be a bit lower once they do.'));
     }
 
     /* Meter: target for most metrics, recent-average benchmark for revenue */
