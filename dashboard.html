@@ -18,19 +18,31 @@
 <link href="https://fonts.googleapis.com/css2?family=Khand:wght@500;600;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap" rel="stylesheet">
 <style>
 :root {
-  /* Brand: gold / black / white. Gold is chrome only - buttons, the active
-     pill, headings, one accent mark - never a data or status color. */
-  --gold:        #F2A900;
-  --gold-dim:    rgba(242,169,0,0.10);
-  --black:       #111111;
-  --white:       #FFFFFF;
-  --cream:       #FAFAFA;   /* page background */
-  --cream2:      #F0F0F0;   /* hover / disabled surface */
-  --cream3:      #E5E5E5;   /* track / divider background */
-  --muted:       #6B6B6B;
-  --text:        #171717;
-  --border:      rgba(0,0,0,0.10);
-  --border-med:  rgba(0,0,0,0.18);
+  /* Brand: dark background, white + yellow. Gold is chrome only - buttons,
+     the active pill/tab, headings, one accent mark - never a data or status
+     color. Re-validated against THIS dark surface (#111111), not just
+     re-used from the old light palette - gold, and every status color, was
+     re-picked and checked with scripts/validate_palette.js for CVD
+     separation and normal-vision distinctness against each other and
+     against black text/backgrounds, not eyeballed. --black/--white keep
+     their names for every rule that already references them, but now carry
+     the opposite roles: --black is the "ink" used for headings/values (light,
+     since the page is dark), --white is the lifted card/input surface (a
+     dark gray, not the page's near-black). --ink-on-accent is the one
+     literal exception - text sitting ON a gold-filled surface (buttons, the
+     active tab/chip) needs to stay dark for contrast no matter the theme. */
+  --gold:        #FDE047;
+  --gold-dim:    rgba(253,224,71,0.14);
+  --ink-on-accent: #14110A;
+  --black:       #F5F5F0;
+  --white:       #1A1A1A;
+  --cream:       #111111;   /* page background */
+  --cream2:      #232323;   /* hover / disabled surface */
+  --cream3:      #2E2E2E;   /* track / divider background */
+  --muted:       #9A9A94;
+  --text:        #EDEDE8;
+  --border:      rgba(255,255,255,0.10);
+  --border-med:  rgba(255,255,255,0.22);
   --c-teal:        #0E8A6E;
   --c-teal-bg:     #E6F5F1;
   --c-teal-border: rgba(14,138,110,0.15);
@@ -46,17 +58,17 @@
   /* Traffic-light target status - a closed system reserved for on/close/over
      target only, kept clear of brand gold (checked for colorblind separation,
      not eyeballed) so color never means two different things on one screen. */
-  --c-amber:        #CA8A04;
+  --c-amber:        #F59E0B;
   --c-amber-bg:     #FCF3D9;
   --c-amber-border: rgba(202,138,4,0.22);
-  --c-coral:        #DC2626;
+  --c-coral:        #EF4444;
   --c-coral-bg:     #FBE9E9;
   --c-coral-border: rgba(220,38,38,0.2);
-  --c-green:        #15803D;
+  --c-green:        #34D399;
   --c-green-bg:     #E7F5EC;
   --c-green-border: rgba(21,128,61,0.2);
   --accent: var(--gold);
-  --accent-dim: rgba(242,169,0,0.12);
+  --accent-dim: rgba(253,224,71,0.14);
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
@@ -82,7 +94,7 @@ body {
   background: transparent; color: var(--text); cursor: pointer; transition: all .15s;
 }
 .nav-tab:hover { background: var(--cream2); }
-.nav-tab.active { background: var(--black); color: #fff; border-color: var(--black); }
+.nav-tab.active { background: var(--accent); color: var(--ink-on-accent); border-color: var(--accent); }
 .nav-tab .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--c-coral); margin-left: 7px; vertical-align: 1px; }
 
 /* Banners */
@@ -104,7 +116,7 @@ body {
   cursor: pointer; transition: all .15s; user-select: none;
 }
 .pchip:hover { border-color: var(--accent); background: var(--accent-dim); }
-.pchip.on { background: var(--black); color: #fff; border-color: var(--black); font-weight: 500; }
+.pchip.on { background: var(--accent); color: var(--ink-on-accent); border-color: var(--accent); font-weight: 500; }
 .period-nav { display: flex; align-items: center; gap: 10px; margin: 2px 0 0.6rem; }
 .nav-arrow {
   width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border-med); background: var(--white);
@@ -122,11 +134,11 @@ body {
 .custom-wrap { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 0.5rem 0; }
 .custom-wrap input[type=date] {
   font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 7px 10px;
-  border: 1px solid var(--border-med); border-radius: 9px; background: #fff; color: var(--text);
+  border: 1px solid var(--border-med); border-radius: 9px; background: var(--white); color: var(--text);
 }
 .btn-small {
   font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; padding: 8px 16px;
-  border-radius: 9px; border: none; background: var(--accent); color: var(--black); cursor: pointer;
+  border-radius: 9px; border: none; background: var(--accent); color: var(--ink-on-accent); cursor: pointer;
 }
 .btn-small:disabled { opacity: 0.5; cursor: default; }
 .btn-plain {
@@ -207,7 +219,7 @@ body {
 .set-label { font-size: 11px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.5rem; }
 .set-cell input[type=text], .set-cell select, .set-cell input[type=number] {
   width: 100%; font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 9px 11px;
-  border: 1px solid var(--border-med); border-radius: 9px; background: #fff; color: var(--text);
+  border: 1px solid var(--border-med); border-radius: 9px; background: var(--white); color: var(--text);
 }
 .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
 .swatch { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
@@ -224,7 +236,7 @@ body {
 .manual-attest { display: flex; align-items: flex-start; gap: 9px; font-size: 13.5px; color: var(--text); margin: 1.1rem 0; max-width: 760px; line-height: 1.5; }
 .manual-attest input { margin-top: 3px; flex-shrink: 0; }
 .err-line { color: var(--c-coral); font-size: 13px; margin: 0.5rem 0; }
-.btn-primary-dash { display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 15px; font-weight: 500; font-family: 'DM Sans', sans-serif; color: var(--black); background: var(--accent); border: none; border-radius: 10px; cursor: pointer; }
+.btn-primary-dash { display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 15px; font-weight: 500; font-family: 'DM Sans', sans-serif; color: var(--ink-on-accent); background: var(--accent); border: none; border-radius: 10px; cursor: pointer; }
 .section-sub { font-family: 'Khand', sans-serif; font-size: 16px; font-weight: 600; color: var(--black); margin: 1.8rem 0 0.5rem; }
 .manual-row { font-size: 13px; color: var(--muted); padding: 6px 0; border-bottom: 1px solid var(--border); }
 
@@ -250,7 +262,7 @@ body {
 .meter-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; min-width: 2px; }
 .meter-fill.good { background: var(--c-green); }
 .meter-fill.bad { background: var(--c-coral); }
-.meter-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--black); border-radius: 2px; }
+.meter-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); border-radius: 2px; }
 .meter-cap { font-size: 12px; color: var(--muted); margin-top: 6px; }
 .meter-cap b { color: var(--text); font-weight: 600; }
 .meter-cap .good { color: var(--c-green); font-weight: 500; }
@@ -262,7 +274,7 @@ body {
 .tbar { fill: var(--accent); }
 .tbar.good { fill: var(--c-green); }
 .tbar.bad { fill: var(--c-coral); }
-.tbar.cur { stroke: var(--black); stroke-width: 0.8; }
+.tbar.cur { stroke: var(--text); stroke-width: 0.8; }
 .tbar { cursor: default; }
 .tbar:hover { opacity: 0.78; }
 
@@ -277,7 +289,7 @@ body {
 
 /* ---- Manager view ---- */
 .talking-lab { font-family: 'Khand', sans-serif; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-right: 2px; }
-.takeaway { background: var(--black); color: var(--white); border-radius: 14px; padding: 16px 20px; display: flex; gap: 12px; align-items: flex-start; margin: 0.6rem 0 1rem; }
+.takeaway { background: var(--white); color: var(--text); border: 1px solid var(--border); border-radius: 14px; padding: 16px 20px; display: flex; gap: 12px; align-items: flex-start; margin: 0.6rem 0 1rem; }
 .takeaway .mark { color: var(--gold); font-family: 'Khand', sans-serif; font-weight: 700; font-size: 20px; line-height: 1.15; flex: none; }
 .takeaway p { margin: 0; font-size: 14.5px; line-height: 1.55; }
 .takeaway b { color: var(--gold); font-weight: 700; }
@@ -301,7 +313,7 @@ body {
 .mgr-cell-delta.bad { color: var(--c-coral); }
 .mgr-spark { display: flex; align-items: flex-end; gap: 3px; height: 30px; }
 .mgr-spark div { flex: 1; border-radius: 2px 2px 0 0; background: var(--cream3); min-height: 2px; }
-.mgr-spark div.cur { background: var(--black); }
+.mgr-spark div.cur { background: var(--text); }
 .mgr-spark div.good { background: var(--c-green); }
 .mgr-spark div.bad { background: var(--c-coral); }
 .mgr-meter-track { position: relative; height: 10px; border-radius: 5px; background: var(--cream3); overflow: hidden; }
@@ -1441,7 +1453,7 @@ function overridePanel(r) {
     inp.type = 'text'; inp.inputMode = integer ? 'numeric' : 'decimal';
     inp.value = (typeof val === 'number') ? String(val) : '';
     inp.placeholder = placeholder;
-    inp.style.cssText = 'font-family:inherit;font-size:15px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;width:150px;background:#fff;color:var(--text);box-sizing:border-box';
+    inp.style.cssText = 'font-family:inherit;font-size:15px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;width:150px;background:var(--white);color:var(--text);box-sizing:border-box';
     wrap.appendChild(inp);
     return inp;
   }
