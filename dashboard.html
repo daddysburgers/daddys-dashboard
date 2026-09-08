@@ -18,16 +18,19 @@
 <link href="https://fonts.googleapis.com/css2?family=Khand:wght@500;600;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap" rel="stylesheet">
 <style>
 :root {
+  /* Brand: gold / black / white. Gold is chrome only - buttons, the active
+     pill, headings, one accent mark - never a data or status color. */
   --gold:        #F2A900;
   --gold-dim:    rgba(242,169,0,0.10);
-  --black:       #0D0D0D;
-  --cream:       #FAF7F2;
-  --cream2:      #F2EDE4;
-  --cream3:      #E8E0D4;
-  --muted:       #8C8075;
-  --text:        #2A2420;
-  --border:      rgba(13,13,13,0.08);
-  --border-med:  rgba(13,13,13,0.14);
+  --black:       #111111;
+  --white:       #FFFFFF;
+  --cream:       #FAFAFA;   /* page background */
+  --cream2:      #F0F0F0;   /* hover / disabled surface */
+  --cream3:      #E5E5E5;   /* track / divider background */
+  --muted:       #6B6B6B;
+  --text:        #171717;
+  --border:      rgba(0,0,0,0.10);
+  --border-med:  rgba(0,0,0,0.18);
   --c-teal:        #0E8A6E;
   --c-teal-bg:     #E6F5F1;
   --c-teal-border: rgba(14,138,110,0.15);
@@ -36,19 +39,22 @@
   --c-blue-bg:     #E8F0FB;
   --c-blue-border: rgba(26,95,180,0.15);
   --c-blue-text:   #0f3470;
-  --c-coral:        #C04B28;
-  --c-coral-bg:     #FAECE7;
-  --c-coral-border: rgba(192,75,40,0.15);
   --c-purple:        #5C3DB0;
   --c-purple-bg:     #EDE8FA;
   --c-purple-border: rgba(92,61,176,0.15);
   --c-purple-text:   #33216b;
-  --c-amber:        #9E6800;
-  --c-amber-bg:     #FDF3DC;
-  --c-amber-border: rgba(158,104,0,0.15);
-  --c-green:        #1A7A3C;
-  --c-green-bg:     #E8F5EE;
-  --c-green-border: rgba(26,122,60,0.15);
+  /* Traffic-light target status - a closed system reserved for on/close/over
+     target only, kept clear of brand gold (checked for colorblind separation,
+     not eyeballed) so color never means two different things on one screen. */
+  --c-amber:        #CA8A04;
+  --c-amber-bg:     #FCF3D9;
+  --c-amber-border: rgba(202,138,4,0.22);
+  --c-coral:        #DC2626;
+  --c-coral-bg:     #FBE9E9;
+  --c-coral-border: rgba(220,38,38,0.2);
+  --c-green:        #15803D;
+  --c-green-bg:     #E7F5EC;
+  --c-green-border: rgba(21,128,61,0.2);
   --accent: var(--gold);
   --accent-dim: rgba(242,169,0,0.12);
 }
@@ -59,9 +65,6 @@ body {
   background: var(--cream);
   font-family: 'DM Sans', sans-serif;
   color: var(--text);
-  background-image:
-    radial-gradient(ellipse at 0% 0%, rgba(242,169,0,0.07) 0%, transparent 55%),
-    radial-gradient(ellipse at 100% 100%, rgba(242,169,0,0.04) 0%, transparent 50%);
 }
 #app { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem 4rem; }
 
@@ -90,18 +93,21 @@ body {
 .banner-link { color: inherit; font-weight: 500; text-decoration: underline; cursor: pointer; }
 
 /* Period bar */
+.control-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 0.5rem; }
+.control-left { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.control-right { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .period-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 0.4rem; }
 .period-label { font-family: 'Khand', sans-serif; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-right: 2px; }
 .pchip {
   font-size: 13px; font-weight: 400; padding: 8px 15px; border-radius: 50px;
-  border: 1px solid var(--border-med); background: #fffdf9; color: var(--text);
+  border: 1px solid var(--border-med); background: var(--white); color: var(--text);
   cursor: pointer; transition: all .15s; user-select: none;
 }
 .pchip:hover { border-color: var(--accent); background: var(--accent-dim); }
 .pchip.on { background: var(--black); color: #fff; border-color: var(--black); font-weight: 500; }
 .period-nav { display: flex; align-items: center; gap: 10px; margin: 2px 0 0.6rem; }
 .nav-arrow {
-  width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border-med); background: #fffdf9;
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border-med); background: var(--white);
   color: var(--text); font-size: 17px; line-height: 1; cursor: pointer; transition: all .15s;
   display: flex; align-items: center; justify-content: center; font-family: 'DM Sans', sans-serif;
 }
@@ -141,7 +147,7 @@ body {
 /* Metric cards */
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
 .mcard {
-  background: #fffdf9; border: 1px solid var(--border); border-radius: 16px;
+  background: var(--white); border: 1px solid var(--border); border-radius: 16px;
   padding: 1.25rem 1.35rem 1.1rem; position: relative; overflow: hidden;
 }
 .mcard.needs-check { border-color: var(--c-coral-border); box-shadow: inset 4px 0 0 var(--c-coral); }
@@ -158,11 +164,11 @@ body {
 .cmp-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; padding: 3px 0; }
 .cmp-lab { color: var(--muted); font-weight: 300; }
 .cmp-val { font-weight: 500; }
-.good { color: var(--c-green); } .bad { color: var(--c-coral); } .flat { color: var(--muted); }
+.good { color: var(--c-green); } .warn { color: var(--c-amber); } .bad { color: var(--c-coral); } .flat { color: var(--muted); }
 .sparkwrap { margin-top: 0.6rem; }
 .spark-cap { font-size: 10px; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 2px; }
 .notconf-msg { font-size: 13px; color: var(--muted); line-height: 1.6; }
-.mcard.alert { border-color: var(--c-amber-border); box-shadow: inset 4px 0 0 var(--c-amber); }
+.mcard.alert { border-color: var(--c-coral-border); box-shadow: inset 4px 0 0 var(--c-coral); }
 .tag-alert { background: var(--c-amber-bg); color: var(--c-amber); border: 1px solid var(--c-amber-border); }
 .m-alert { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--c-amber); font-weight: 500; margin: 0 0 0.5rem; }
 .m-decision { font-size: 12px; color: var(--muted); font-weight: 300; line-height: 1.55; margin-top: 0.45rem; }
@@ -173,7 +179,7 @@ body {
 .screen-sub { font-size: 14px; color: var(--muted); font-weight: 300; line-height: 1.7; max-width: 640px; margin-bottom: 1.2rem; }
 
 /* Connections */
-.conn-card { background: #fffdf9; border: 1px solid var(--border); border-radius: 14px; padding: 1.15rem 1.3rem; margin-bottom: 10px; }
+.conn-card { background: var(--white); border: 1px solid var(--border); border-radius: 14px; padding: 1.15rem 1.3rem; margin-bottom: 10px; }
 .conn-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 0.3rem; }
 .conn-name { font-family: 'Khand', sans-serif; font-size: 19px; font-weight: 600; color: var(--black); }
 .conn-pill { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 10px; border-radius: 20px; }
@@ -186,7 +192,7 @@ body {
 .cb-url { font-size: 12px; color: var(--muted); word-break: break-all; background: var(--cream2); border-radius: 8px; padding: 0.5rem 0.7rem; margin-top: 0.55rem; }
 
 /* Reconciliation */
-.recon-card { background: #fffdf9; border: 1px solid var(--border); border-radius: 14px; padding: 1.15rem 1.3rem; margin-bottom: 10px; }
+.recon-card { background: var(--white); border: 1px solid var(--border); border-radius: 14px; padding: 1.15rem 1.3rem; margin-bottom: 10px; }
 .recon-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .recon-metric { font-family: 'Khand', sans-serif; font-size: 19px; font-weight: 600; color: var(--black); }
 .recon-fig { font-family: 'Khand', sans-serif; font-size: 24px; font-weight: 700; color: var(--black); }
@@ -197,7 +203,7 @@ body {
 
 /* Settings */
 .set-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; max-width: 760px; }
-.set-cell { background: #fffdf9; border: 1px solid var(--border); border-radius: 14px; padding: 1rem 1.2rem; }
+.set-cell { background: var(--white); border: 1px solid var(--border); border-radius: 14px; padding: 1rem 1.2rem; }
 .set-label { font-size: 11px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.5rem; }
 .set-cell input[type=text], .set-cell select, .set-cell input[type=number] {
   width: 100%; font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 9px 11px;
@@ -209,7 +215,7 @@ body {
 .set-note { font-size: 12px; color: var(--muted); font-weight: 300; line-height: 1.6; margin-top: 0.5rem; }
 .tag-manual { background: var(--c-blue-bg); color: var(--c-blue-text); border: 1px solid var(--c-blue-border); }
 .mode-wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; max-width: 760px; margin-bottom: 1.6rem; }
-.mode-card { background: #fffdf9; border: 1px solid var(--border-med); border-radius: 14px; padding: 1rem 1.2rem; cursor: pointer; transition: all 0.15s; }
+.mode-card { background: var(--white); border: 1px solid var(--border-med); border-radius: 14px; padding: 1rem 1.2rem; cursor: pointer; transition: all 0.15s; }
 .mode-card:hover { border-color: var(--accent); }
 .mode-card.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-dim); }
 .mode-t { font-family: 'Khand', sans-serif; font-size: 17px; font-weight: 600; color: var(--black); margin-bottom: 3px; }
@@ -248,6 +254,7 @@ body {
 .meter-cap { font-size: 12px; color: var(--muted); margin-top: 6px; }
 .meter-cap b { color: var(--text); font-weight: 600; }
 .meter-cap .good { color: var(--c-green); font-weight: 500; }
+.meter-cap .warn { color: var(--c-amber); font-weight: 500; }
 .meter-cap .bad { color: var(--c-coral); font-weight: 500; }
 .tbars { margin-top: 0.7rem; }
 .tbars-cap { font-size: 10px; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 5px; }
@@ -258,7 +265,51 @@ body {
 .tbar.cur { stroke: var(--black); stroke-width: 0.8; }
 .tbar { cursor: default; }
 .tbar:hover { opacity: 0.78; }
-.mcard.alert { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+
+/* 3-zone target meter (on target / close / over) - the same red/amber/green
+   used everywhere else a target is judged, never a 2-color good/bad only. */
+.meter-fill.warn { background: var(--c-amber); }
+.meter-zone { position: absolute; top: 0; bottom: 0; opacity: 0.25; }
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.status-dot.good { background: var(--c-green); }
+.status-dot.warn { background: var(--c-amber); }
+.status-dot.bad { background: var(--c-coral); }
+
+/* ---- Manager view ---- */
+.talking-lab { font-family: 'Khand', sans-serif; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-right: 2px; }
+.takeaway { background: var(--black); color: var(--white); border-radius: 14px; padding: 16px 20px; display: flex; gap: 12px; align-items: flex-start; margin: 0.6rem 0 1rem; }
+.takeaway .mark { color: var(--gold); font-family: 'Khand', sans-serif; font-weight: 700; font-size: 20px; line-height: 1.15; flex: none; }
+.takeaway p { margin: 0; font-size: 14.5px; line-height: 1.55; }
+.takeaway b { color: var(--gold); font-weight: 700; }
+.callback { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); margin: -0.4rem 0 1rem; padding-left: 2px; }
+.callback .ok { color: var(--c-green); font-weight: 500; }
+.callback .open { color: var(--c-coral); font-weight: 500; }
+.mgr-card { background: var(--white); border: 1px solid var(--border); border-radius: 14px; padding: 6px 0 4px; margin-bottom: 20px; }
+.mgr-head { display: flex; align-items: baseline; justify-content: space-between; padding: 12px 20px 4px; }
+.mgr-title { font-family: 'Khand', sans-serif; font-size: 21px; font-weight: 700; color: var(--black); }
+.mgr-when { font-size: 12.5px; color: var(--muted); }
+.mgr-row { display: flex; align-items: center; gap: 16px; padding: 13px 20px; border-top: 1px solid var(--border); }
+.mgr-row:first-of-type { border-top: none; }
+.mgr-lab { width: 150px; flex: none; font-size: 13px; font-weight: 600; color: var(--text); }
+.mgr-lab .tgt { display: block; font-size: 10.5px; font-weight: 400; color: var(--muted); margin-top: 1px; }
+.mgr-viz { flex: 1; min-width: 0; }
+.mgr-val { width: 118px; flex: none; text-align: right; }
+.mgr-cell-val { display: block; font-family: 'Khand', sans-serif; font-size: 20px; font-weight: 700; color: var(--black); font-variant-numeric: tabular-nums; }
+.mgr-cell-delta { display: block; font-size: 11px; margin-top: 1px; font-weight: 600; }
+.mgr-cell-delta.good { color: var(--c-green); }
+.mgr-cell-delta.warn { color: var(--c-amber); }
+.mgr-cell-delta.bad { color: var(--c-coral); }
+.mgr-spark { display: flex; align-items: flex-end; gap: 3px; height: 30px; }
+.mgr-spark div { flex: 1; border-radius: 2px 2px 0 0; background: var(--cream3); min-height: 2px; }
+.mgr-spark div.cur { background: var(--black); }
+.mgr-spark div.good { background: var(--c-green); }
+.mgr-spark div.bad { background: var(--c-coral); }
+.mgr-meter-track { position: relative; height: 10px; border-radius: 5px; background: var(--cream3); overflow: hidden; }
+@media print {
+  .nav, .control-bar, .fresh-row, #go-conn, .btn-plain, .mgr-print-btn { display: none !important; }
+  body { background: var(--white); }
+  .mgr-card { border: none; }
+}
 </style>
 </head>
 <body>
@@ -559,14 +610,25 @@ function fmtRange(r) {
    App state + data fetch
 ============================================================ */
 var state = {
-  view: 'dashboard',           /* dashboard | connections | recon | settings */
+  view: 'dashboard',           /* dashboard | manager | connections | recon | settings */
   period: SETTINGS.defaultPeriod === 'custom' ? 'week:0' : normalizePeriodKey(SETTINGS.defaultPeriod),
   customFrom: null, customTo: null,
   loading: false,
   data: null,                  /* last /api/metrics payload */
   fetchedAt: null,
-  fetchError: null
+  fetchError: null,
+  managerLoc: 'combined'       /* "Talking to" store picker on the Manager view - independent of SETTINGS.location */
 };
+
+/* Last N week-start dates (oldest first), ending at the current in-progress
+   week - respects the venue's own weekStart, since the server can't guess it. */
+var MGR_WEEKLY_TREND_COUNT = 8; /* matches the Manager view sparkline length exactly - no wasted API calls */
+function lastNWeekStarts(n) {
+  var cur = startOfWeek(tradingToday());
+  var out = [];
+  for (var i = n - 1; i >= 0; i--) out.push(iso(addDays(cur, -7 * i)));
+  return out;
+}
 
 function apiUrl(force) {
   var r = resolvePeriod(state.period, state.customFrom, state.customTo);
@@ -576,6 +638,7 @@ function apiUrl(force) {
         + '&prev=' + iso(r.prev.from) + ':' + iso(r.prev.to)
         + (r.yoy ? '&yoy=' + iso(r.yoy.from) + ':' + iso(r.yoy.to) : '')
         + '&trend=' + monthKey(trendStart) + ':' + monthKey(trendEnd)
+        + '&trendW=' + lastNWeekStarts(MGR_WEEKLY_TREND_COUNT).join(',')
         + '&tz=' + encodeURIComponent(SETTINGS.timezone)
         + '&rollover=' + (+SETTINGS.rolloverHour || 0);
   return '/api/metrics?' + q + (force ? '&refresh=1' : '');
@@ -663,18 +726,28 @@ function slotRange(slot) {
   var rr = resolvePeriod(state.period, state.customFrom, state.customTo);
   return slot === 'cur' ? { from: rr.from, to: rr.to } : (slot === 'prev' ? rr.prev : (slot === 'yoy' ? rr.yoy : null));
 }
-function overrideFor(slot) {
+/* Look up an entered override/Uber-Eats block by exact date range - the same
+   key shape rangeKey() builds, so a trend bucket whose dates line up with a
+   period you've entered figures for picks up your numbers automatically. */
+function overrideForRange(fromStr, toStr) {
   if (isManual()) return null;
+  return OVERRIDES[fromStr + '_' + toStr] || null;
+}
+function uberForRange(fromStr, toStr) {
+  if (isManual()) return null;
+  return UBER[fromStr + '_' + toStr] || null;
+}
+function overrideFor(slot) {
   var rng = slotRange(slot);
-  return rng ? (OVERRIDES[rangeKey(rng.from, rng.to)] || null) : null;
+  return rng ? overrideForRange(iso(rng.from), iso(rng.to)) : null;
 }
 function uberFor(slot) {
-  if (isManual()) return null;
   var rng = slotRange(slot);
-  return rng ? (UBER[rangeKey(rng.from, rng.to)] || null) : null;
+  return rng ? uberForRange(iso(rng.from), iso(rng.to)) : null;
 }
 
-function periodValues(slot) {  /* slot: 'cur' | 'prev' | 'yoy' — resolved for the selected shop */
+function periodValues(slot, locOverride) {  /* slot: 'cur' | 'prev' | 'yoy'. locOverride lets a caller (Manager view) resolve
+     figures for a specific shop without touching SETTINGS.location / the main dashboard's shop switch. */
   var d = state.data;
   if (!d || !d.periods || !d.periods[slot]) return {};
   var p = d.periods[slot];
@@ -713,7 +786,7 @@ function periodValues(slot) {  /* slot: 'cur' | 'prev' | 'yoy' — resolved for 
     return { v: liveFn('combined'), m: false };
   }
 
-  var loc = curLoc();
+  var loc = locOverride || curLoc();
   var out = { _manual: {} };
   if (loc === 'combined') {
     var cr = combined('revenue', liveRev); out.revenue = cr.v; if (cr.m) out._manual.revenue = true;
@@ -856,6 +929,21 @@ function targetBreached(key, v) {
   if (t == null) return false;
   return METRIC_DEFS[key].goodDir === 'down' ? (v > t) : (v < t);
 }
+/* Three-zone read on a metric vs its target: 'good' (on target), 'warn'
+   (missed but within the close band - worth a mention, not an alarm), 'bad'
+   (missed by more than that). null when there is nothing to judge (no target
+   set, e.g. Revenue/Transactions/ACS, or no data yet). One shared rule used
+   everywhere a target is shown, so the meter and the takeaway line always
+   agree on what counts as "close". */
+var TARGET_WARN_BAND = 3; /* percentage points, for the %-of-revenue metrics that carry a target today */
+function targetZone(key, v) {
+  if (v == null || v === 'dash') return null;
+  var t = metricTarget(key);
+  if (t == null) return null;
+  var bad = METRIC_DEFS[key].goodDir === 'down' ? (v > t) : (v < t);
+  if (!bad) return 'good';
+  return (Math.abs(v - t) <= TARGET_WARN_BAND) ? 'warn' : 'bad';
+}
 
 /* ============================================================
    Rendering
@@ -906,8 +994,8 @@ function render() {
   /* Nav */
   var nav = el('div', 'nav');
   var tabs = isManual()
-    ? [ { key: 'dashboard', label: 'Dashboard' }, { key: 'enter', label: 'Enter numbers' }, { key: 'settings', label: 'Settings' } ]
-    : [ { key: 'dashboard', label: 'Dashboard' }, { key: 'connections', label: 'Connections' }, { key: 'recon', label: 'Check your numbers' }, { key: 'settings', label: 'Settings' } ];
+    ? [ { key: 'dashboard', label: 'Dashboard' }, { key: 'manager', label: 'Manager view' }, { key: 'enter', label: 'Enter numbers' }, { key: 'settings', label: 'Settings' } ]
+    : [ { key: 'dashboard', label: 'Dashboard' }, { key: 'manager', label: 'Manager view' }, { key: 'connections', label: 'Connections' }, { key: 'recon', label: 'Check your numbers' }, { key: 'settings', label: 'Settings' } ];
   tabs.forEach(function (t) {
     var b = el('button', 'nav-tab' + (state.view === t.key ? ' active' : ''));
     b.innerHTML = t.label + ((t.key === 'recon' && anyConfiguredSource() && unconfirmedConnectedMetrics().length) ? '<span class="dot"></span>' : '');
@@ -941,6 +1029,7 @@ function render() {
 
   if (isManual() && (state.view === 'connections' || state.view === 'recon')) state.view = 'dashboard';
   if (state.view === 'dashboard') renderDashboard(root);
+  else if (state.view === 'manager') renderManager(root);
   else if (state.view === 'enter') renderManualEntry(root);
   else if (state.view === 'connections') renderConnections(root);
   else if (state.view === 'recon') renderRecon(root);
@@ -972,23 +1061,25 @@ function renderDashboard(root) {
   var r = resolvePeriod(state.period, state.customFrom, state.customTo);
   var pp = periodParts(state.period);
 
-  /* Period selector: pick a period type, then step through it week-to-week
-     (or month/quarter/year-to-year) with the arrows - no date typing needed
-     unless you want a custom range. */
-  var bar = el('div', 'period-bar');
-  bar.appendChild(el('span', 'period-label', 'Period'));
+  /* Period + Shop selector on one row: pick a period type, then step through
+     it week-to-week (or month/quarter/year-to-year) with the arrows - no date
+     typing needed unless you want a custom range. Shop sits on the right of
+     the same row so both controls read together instead of stacking. */
+  var controlBar = el('div', 'control-bar');
+  var left = el('div', 'control-left');
+  left.appendChild(el('span', 'period-label', 'Period'));
   PERIOD_TYPES.forEach(function (pt) {
     var c = el('button', 'pchip' + (pp.type === pt.type ? ' on' : ''), pt.label);
     c.onclick = function () {
       if (pt.type === 'custom') { state.period = 'custom'; render(); return; }
       state.period = periodKey(pt.type, 0); fetchData();
     };
-    bar.appendChild(c);
+    left.appendChild(c);
   });
-  root.appendChild(bar);
 
   if (pp.type !== 'custom') {
     var nav = el('div', 'period-nav');
+    nav.style.margin = '0';
     var prevBtn = el('button', 'nav-arrow', '‹');
     prevBtn.title = 'Previous ' + pp.type;
     prevBtn.onclick = function () { state.period = periodKey(pp.type, pp.offset - 1); fetchData(); };
@@ -1005,18 +1096,20 @@ function renderDashboard(root) {
     nextBtn.disabled = pp.offset >= 0;
     nextBtn.onclick = function () { if (pp.offset < 0) { state.period = periodKey(pp.type, pp.offset + 1); fetchData(); } };
     nav.appendChild(nextBtn);
-    root.appendChild(nav);
+    left.appendChild(nav);
   }
+  controlBar.appendChild(left);
 
   /* Shop selector — flip the whole board to one shop or the combined total. */
-  var lbar = el('div', 'period-bar');
-  lbar.appendChild(el('span', 'period-label', 'Shop'));
+  var right = el('div', 'control-right');
+  right.appendChild(el('span', 'period-label', 'Shop'));
   [['combined', 'Combined'], ['windsor', 'Windsor'], ['richmond', 'Richmond']].forEach(function (o) {
     var c = el('button', 'pchip' + (curLoc() === o[0] ? ' on' : ''), o[1]);
     c.onclick = function () { SETTINGS.location = o[0]; saveSettings(); render(); };
-    lbar.appendChild(c);
+    right.appendChild(c);
   });
-  root.appendChild(lbar);
+  controlBar.appendChild(right);
+  root.appendChild(controlBar);
 
   if (pp.type === 'custom') {
     var cw = el('div', 'custom-wrap');
@@ -1059,6 +1152,28 @@ function renderDashboard(root) {
 
   root.appendChild(el('div', 'period-heading', periodLabel() + ' <span>· ' + fmtRange(r) + '</span>'));
 
+  /* Stale-data nudge: on a recent week you haven't confirmed yet, say so
+     plainly rather than silently showing Xero's live (possibly bank-feed-
+     lagged) figure as if it were final. Only for the current week and the
+     one or two before it - older weeks are just history, not "stale". */
+  if (!isManual() && pp.type === 'week' && pp.offset <= 0 && pp.offset >= -2) {
+    var wkKey = rangeKey(r.from, r.to);
+    if (!OVERRIDES[wkKey]) {
+      var nudge = el('div', 'banner banner-amber');
+      nudge.innerHTML = '<b>You haven’t entered your own figures for ' + esc(periodLabel().toLowerCase()) + ' yet.</b> '
+        + 'The board is showing Xero’s live figure, which can lag behind your bank feed. Enter your Revenue and Cost of goods once you have them and the board switches to your numbers.';
+      var nudgeBtn = el('button', 'btn-plain', 'Enter figures now');
+      nudgeBtn.style.marginTop = '8px';
+      nudgeBtn.onclick = function () {
+        var panel = document.getElementById('ov-panel');
+        if (panel) { panel.open = true; panel.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      };
+      nudge.appendChild(document.createElement('br'));
+      nudge.appendChild(nudgeBtn);
+      root.appendChild(nudge);
+    }
+  }
+
   if (!isManual()) root.appendChild(overridePanel(r));
 
   if (isManual() && !manualEntry({ from: r.from, to: r.to })) {
@@ -1082,6 +1197,223 @@ function renderDashboard(root) {
   root.appendChild(grid);
 }
 
+/* ---------- Manager view ----------
+   A meeting-ready screen for one store (or the combined total) built around
+   the SAME Period control as the main dashboard, plus its own "Talking to"
+   store picker. A one-line takeaway and a "last time" callback sit above the
+   numbers so nothing important gets missed reading digits cold. */
+var MGR_SPARK_METRICS = ['revenue', 'transactions', 'acs']; /* magnitude metrics: no target, shown as trend */
+var MGR_TARGET_METRICS = ['cogs', 'wage', 'overheads', 'profit']; /* %-of-revenue metrics: shown as a target meter */
+
+function managerLabel(loc) { return loc === 'combined' ? 'Combined' : (loc === 'windsor' ? 'Windsor' : 'Richmond'); }
+
+/* Pick the single best positive move and the single worst off-target metric,
+   and turn them into one plain-English sentence. Only states what can be
+   honestly computed from this period vs the last - no invented superlatives
+   like "best week in a month" unless the trend data actually supports it. */
+function managerTakeaway(loc, cur, prev) {
+  var best = null; /* { key, cmp } */
+  MGR_SPARK_METRICS.forEach(function (k) {
+    var cv = metricValue(k, cur), pv = metricValue(k, prev);
+    var cmp = compare(k, cv, pv);
+    if (cmp && cmp.good && (!best || parseFloat(cmp.text) > parseFloat(best.cmp.text))) best = { key: k, cmp: cmp };
+  });
+  var worst = null; /* { key, zone, pf, t } */
+  MGR_TARGET_METRICS.forEach(function (k) {
+    if (loc !== 'combined' && ['wage', 'overheads', 'profit'].indexOf(k) >= 0) return; /* combined-only */
+    var pf = primaryFigure(k, cur);
+    var zone = targetZone(k, pf);
+    if (!zone || zone === 'good') return;
+    var t = metricTarget(k);
+    var rank = zone === 'bad' ? 2 : 1;
+    var curRank = worst ? (worst.zone === 'bad' ? 2 : 1) : 0;
+    if (rank > curRank || (worst && rank === curRank && Math.abs(pf - t) > Math.abs(worst.pf - worst.t))) {
+      worst = { key: k, zone: zone, pf: pf, t: t };
+    }
+  });
+
+  var wrap = el('div', 'takeaway');
+  wrap.appendChild(el('div', 'mark', worst && !best ? '!' : '▲'));
+  var p = el('p');
+  var bits = [];
+  if (best) {
+    bits.push('<b>' + esc(managerLabel(loc)) + (loc === 'combined' ? '' : '’s') + ' up ' + esc(best.cmp.text) + ' on ' + esc(METRIC_DEFS[best.key].label) + '</b>');
+  }
+  if (worst) {
+    var over = METRIC_DEFS[worst.key].goodDir === 'down';
+    var verb = worst.zone === 'bad' ? (over ? 'is over target' : 'is under target') : (over ? 'is close to target' : 'is close to target');
+    bits.push((best ? 'But ' : '') + '<b>' + esc(METRIC_DEFS[worst.key].label) + ' ' + verb + '</b> at ' + esc(fmtPctVal(worst.pf)) + ' (target ' + esc(fmtTarget(worst.key, worst.t)) + ')' + (worst.zone === 'bad' ? ' — worth raising today.' : ' — worth keeping an eye on.'));
+  }
+  if (!best && !worst) bits.push('<b>Nothing off target this period</b> and no single number jumped out — a steady one.');
+  p.innerHTML = bits.join(' ');
+  wrap.appendChild(p);
+  return wrap;
+}
+
+/* "Last time": did each %-of-revenue metric's target status change since the
+   prior period? Surfaces what got fixed and what is still open, so a manager
+   meeting can pick up where the last one left off instead of re-covering it. */
+function managerCallback(loc, cur, prev) {
+  var lines = [];
+  MGR_TARGET_METRICS.forEach(function (k) {
+    if (loc !== 'combined' && ['wage', 'overheads', 'profit'].indexOf(k) >= 0) return;
+    var curZone = targetZone(k, primaryFigure(k, cur));
+    var prevZone = targetZone(k, primaryFigure(k, prev));
+    if (!curZone || !prevZone) return;
+    var wasOff = prevZone !== 'good', isOff = curZone !== 'good';
+    if (wasOff && !isOff) lines.push({ cls: 'ok', text: METRIC_DEFS[k].label + ' is back on target since last time.' });
+    else if (wasOff && isOff) lines.push({ cls: 'open', text: METRIC_DEFS[k].label + ' is still off target — raised last time too.' });
+  });
+  if (!lines.length) return null;
+  var wrap = el('div', 'callback');
+  lines.forEach(function (l) { wrap.appendChild(el('div', l.cls, (l.cls === 'ok' ? '✓ ' : '● ') + esc(l.text))); });
+  return wrap;
+}
+
+function managerSparkRow(key, loc, r) {
+  /* Match the mini-trend's granularity to whatever period is selected: Week
+     shows the last few weeks, everything else (Month/Quarter/FY) shows months -
+     the one thing Kane specifically asked to have line up. */
+  var granularity = periodParts(state.period).type === 'week' ? 'weekly' : 'monthly';
+  var series = trendSeries(key, loc, granularity);
+  var row = el('div', 'mgr-row');
+  row.appendChild(el('div', 'mgr-lab', esc(METRIC_DEFS[key].label)));
+  var viz = el('div', 'mgr-viz');
+  if (series && series.values.some(function (x) { return x != null; })) {
+    var vals = series.values.slice(-8);
+    var max = Math.max.apply(null, vals.filter(function (x) { return x != null; }).concat([0]));
+    var spark = el('div', 'mgr-spark');
+    vals.forEach(function (v, i) {
+      var bar = document.createElement('div');
+      var h = (v == null || !(max > 0)) ? 2 : Math.max(2, Math.round((v / max) * 100));
+      bar.style.height = h + '%';
+      if (i === vals.length - 1) bar.className = 'cur';
+      spark.appendChild(bar);
+    });
+    viz.appendChild(spark);
+  } else {
+    viz.appendChild(el('span', 'flat', 'Not enough history yet'));
+  }
+  row.appendChild(viz);
+  return row;
+}
+
+function managerValCell(key, cur, prev) {
+  var cell = el('div', 'mgr-val');
+  var v = metricValue(key, cur);
+  cell.appendChild(el('span', 'mgr-cell-val', fmtValue(key, v)));
+  var cmp = compare(key, v, metricValue(key, prev));
+  var deltaCls = !cmp ? 'flat' : (cmp.good == null ? 'flat' : (cmp.good ? 'good' : 'bad'));
+  var deltaTxt = !cmp ? 'no data yet' : ((cmp.dir === 'up' ? '▲ ' : cmp.dir === 'down' ? '▼ ' : '● ') + cmp.text);
+  cell.appendChild(el('span', 'mgr-cell-delta ' + deltaCls, esc(deltaTxt)));
+  return cell;
+}
+
+function managerMeterRow(key, cur) {
+  var pf = primaryFigure(key, cur);
+  var t = metricTarget(key);
+  var row = el('div', 'mgr-row');
+  var over = METRIC_DEFS[key].goodDir === 'down';
+  var tgtTxt = t == null ? '' : (over ? 'target ≤' : 'target ≥') + fmtTarget(key, t);
+  row.appendChild(el('div', 'mgr-lab', esc(METRIC_DEFS[key].label) + (tgtTxt ? '<span class="tgt">' + esc(tgtTxt) + '</span>' : '')));
+  var viz = el('div', 'mgr-viz');
+  var meter = targetMeter(key, pf);
+  if (meter) viz.appendChild(meter); else viz.appendChild(el('span', 'flat', 'No target set'));
+  row.appendChild(viz);
+  var cell = el('div', 'mgr-val');
+  var zone = targetZone(key, pf);
+  var valLine = el('span', null);
+  if (zone) valLine.appendChild(el('span', 'status-dot ' + zone));
+  var valSpan = el('span', 'mgr-cell-val', esc(fmtPctVal(pf)));
+  valSpan.style.display = 'inline';
+  valLine.appendChild(valSpan);
+  cell.appendChild(valLine);
+  var status = !zone ? '' : (zone === 'good' ? 'on target' : zone === 'warn' ? 'close to target' : (over ? 'over target' : 'below target'));
+  if (status) cell.appendChild(el('span', 'mgr-cell-delta ' + zone, status));
+  row.appendChild(cell);
+  return row;
+}
+
+function renderManager(root) {
+  var r = resolvePeriod(state.period, state.customFrom, state.customTo);
+  var pp = periodParts(state.period);
+
+  /* Same Period control as the main dashboard - deliberately not a separate,
+     simplified control, so switching between the two views never disorients. */
+  var controlBar = el('div', 'control-bar');
+  var left = el('div', 'control-left');
+  left.appendChild(el('span', 'period-label', 'Period'));
+  PERIOD_TYPES.filter(function (pt) { return pt.type !== 'custom'; }).forEach(function (pt) {
+    var c = el('button', 'pchip' + (pp.type === pt.type ? ' on' : ''), pt.label);
+    c.onclick = function () { state.period = periodKey(pt.type, 0); fetchData(); };
+    left.appendChild(c);
+  });
+  var nav = el('div', 'period-nav');
+  nav.style.margin = '0';
+  var prevBtn = el('button', 'nav-arrow', '‹');
+  prevBtn.title = 'Previous ' + pp.type;
+  prevBtn.onclick = function () { state.period = periodKey(pp.type, pp.offset - 1); fetchData(); };
+  nav.appendChild(prevBtn);
+  if (pp.offset !== 0) {
+    var todayBtn = el('button', 'nav-today', 'Jump to current');
+    todayBtn.onclick = function () { state.period = periodKey(pp.type, 0); fetchData(); };
+    nav.appendChild(todayBtn);
+  } else {
+    nav.appendChild(el('span', 'nav-current', 'Current ' + pp.type));
+  }
+  var nextBtn = el('button', 'nav-arrow', '›');
+  nextBtn.title = 'Next ' + pp.type;
+  nextBtn.disabled = pp.offset >= 0;
+  nextBtn.onclick = function () { if (pp.offset < 0) { state.period = periodKey(pp.type, pp.offset + 1); fetchData(); } };
+  nav.appendChild(nextBtn);
+  left.appendChild(nav);
+  controlBar.appendChild(left);
+
+  var right = el('div', 'control-right');
+  right.appendChild(el('span', 'talking-lab', 'Talking to'));
+  [['combined', 'Combined'], ['windsor', 'Windsor'], ['richmond', 'Richmond']].forEach(function (o) {
+    var c = el('button', 'pchip' + (state.managerLoc === o[0] ? ' on' : ''), o[1]);
+    c.onclick = function () { state.managerLoc = o[0]; render(); };
+    right.appendChild(c);
+  });
+  controlBar.appendChild(right);
+  root.appendChild(controlBar);
+
+  var loc = state.managerLoc;
+  var cur = periodValues('cur', loc), prev = periodValues('prev', loc);
+  var shopMetrics = ['revenue', 'transactions', 'acs', 'cogs'];
+
+  var printBtn = el('button', 'btn-plain mgr-print-btn', 'Print / save as image');
+  printBtn.style.margin = '0 0 12px'; printBtn.style.padding = '5px 12px'; printBtn.style.fontSize = '12px';
+  printBtn.onclick = function () { window.print(); };
+  root.appendChild(printBtn);
+
+  var card = el('div', 'mgr-card');
+  card.appendChild(managerTakeaway(loc, cur, prev));
+  var cb = managerCallback(loc, cur, prev);
+  if (cb) card.appendChild(cb);
+
+  var head = el('div', 'mgr-head');
+  head.appendChild(el('div', 'mgr-title', esc(managerLabel(loc)) + ' — ' + esc(periodLabel().toLowerCase())));
+  head.appendChild(el('div', 'mgr-when', esc(fmtRange(r)) + ' · ' + esc(r.prevLabel)));
+  card.appendChild(head);
+
+  CHOSEN.filter(function (k) { return loc === 'combined' || shopMetrics.indexOf(k) >= 0; }).forEach(function (k) {
+    if (MGR_SPARK_METRICS.indexOf(k) >= 0) card.appendChild(managerSparkRowWithVal(k, loc, cur, prev, r));
+    else card.appendChild(managerMeterRow(k, cur));
+  });
+
+  root.appendChild(card);
+}
+
+/* A spark row that also carries the value/delta cell (sparkline rows need
+   both the trend AND the plain number - a manager reads the number first). */
+function managerSparkRowWithVal(key, loc, cur, prev, r) {
+  var row = managerSparkRow(key, loc, r);
+  row.appendChild(managerValCell(key, cur, prev));
+  return row;
+}
+
 /* Hybrid entry: type Revenue / Cost of goods for this period; they overlay the
    live data (wages + transactions stay live) and are badged "Entered by you". */
 function overridePanel(r) {
@@ -1090,6 +1422,7 @@ function overridePanel(r) {
   var ub = UBER[key] || {};
   var has = !!OVERRIDES[key] || !!UBER[key];
   var det = document.createElement('details');
+  det.id = 'ov-panel';
   det.style.cssText = 'background:var(--cream2);border:1px solid var(--border);border-radius:12px;padding:10px 14px;margin:0 0 14px;font-size:13px';
   var sum = document.createElement('summary');
   sum.style.cssText = 'cursor:pointer;font-weight:500;color:var(--black)';
@@ -1129,6 +1462,33 @@ function overridePanel(r) {
   wrap.appendChild(win.box); wrap.appendChild(rich.box);
   det.appendChild(wrap);
 
+  /* Fat-finger check: compare a typed figure against the same shop's figure
+     from the equivalent period immediately before (only when one was entered
+     there too - trading doesn't usually swing more than 3x week to week, so
+     a bigger jump is more often a stray zero than a real result). */
+  function priorKey() {
+    var pp2 = periodParts(state.period);
+    if (pp2.type === 'custom') {
+      var len = Math.round((r.to - r.from) / 86400000) + 1;
+      return rangeKey(addDays(r.from, -len), addDays(r.from, -1));
+    }
+    /* "One period back" of the same type - e.g. viewing this week (in
+       progress, so it's shorter than 7 days) still compares against the
+       full LAST week, not an equally-short sliver right before it. */
+    var pr = resolvePeriod(periodKey(pp2.type, pp2.offset - 1));
+    return rangeKey(pr.from, pr.to);
+  }
+  function outlierNote(loc, field, val) {
+    var priorShop = (OVERRIDES[priorKey()] || {})[loc];
+    var prior = (priorShop && typeof priorShop[field] === 'number') ? priorShop[field] : null;
+    if (prior == null || prior === 0 || val === 0) return null;
+    var ratio = val / prior;
+    if (ratio >= 0.3 && ratio <= 3) return null;
+    var shopLabel = loc === 'windsor' ? 'Windsor' : 'Richmond';
+    var fieldLabel = field === 'revenue' ? 'Revenue' : 'Cost of goods';
+    return fieldLabel + ' for ' + shopLabel + ': ' + fmtMoney(val) + ' vs ' + fmtMoney(prior) + ' last time (' + (ratio > 1 ? Math.round(ratio * 10) / 10 + '×' : Math.round(ratio * 100) + '%') + ')';
+  }
+
   var actions = el('div'); actions.style.cssText = 'margin-top:4px;display:flex;gap:10px;align-items:center';
   var save = el('button', 'btn-small', 'Save my figures');
   save.onclick = function () {
@@ -1139,6 +1499,22 @@ function overridePanel(r) {
     var rr = shopOv(rich); if (rr) o.richmond = rr;
     var wu = shopUber(win); if (wu != null) u.windsor = wu;
     var ru = shopUber(rich); if (ru != null) u.richmond = ru;
+
+    var notes = [];
+    ['windsor', 'richmond'].forEach(function (loc) {
+      var s = (loc === 'windsor') ? w : rr;
+      if (!s) return;
+      ['revenue', 'cogs'].forEach(function (field) {
+        if (typeof s[field] !== 'number') return;
+        var note = outlierNote(loc, field, s[field]);
+        if (note) notes.push(note);
+      });
+    });
+    if (notes.length) {
+      var ok = confirm('These figures are a big jump from last time:\n\n' + notes.join('\n') + '\n\nSave anyway?');
+      if (!ok) return;
+    }
+
     if (Object.keys(o).length) OVERRIDES[key] = o; else delete OVERRIDES[key];
     if (Object.keys(u).length) UBER[key] = u; else delete UBER[key];
     saveOverrides(); saveUber(); render();
@@ -1242,33 +1618,86 @@ function cmpVal(cmp) {
   return n;
 }
 
+/* The date range a trend bucket covers, so it can be matched against an
+   entered override's own range key. Monthly buckets are keyed 'YYYY-MM'
+   (calendar month); weekly buckets are keyed by their week-start date. */
+function trendBucketRange(bucketKey, weekly) {
+  if (weekly) return { from: bucketKey, to: iso(addDays(fromIso(bucketKey), 6)) };
+  var from = fromIso(bucketKey + '-01');
+  return { from: bucketKey + '-01', to: iso(addDays(addMonths(from, 1), -1)) };
+}
+
 /* Trend per metric, in the card's PRIMARY unit: % of revenue for dual metrics,
-   the value otherwise. One value per month, null where data is missing. */
-function trendSeries(key) {
+   the value otherwise. One value per month (or week), null where data is
+   missing. Any period you've entered your own Revenue/Cost of goods/Uber Eats
+   figures for overlays the live pull here too, using the exact same combined/
+   per-shop precedence as the cards (periodValues) - so a corrected week shows
+   corrected everywhere, trend included, not just on the card itself. */
+function trendSeries(key, locOverride, granularity) {  /* locOverride lets a caller (Manager view) read a specific
+     shop's trend without touching SETTINGS.location / the main dashboard's shop switch. granularity: 'monthly'
+     (default, last ~12 months) or 'weekly' (last MGR_WEEKLY_TREND_COUNT weeks, from the server's trendW block) -
+     Manager view asks for 'weekly' when the selected period is Week, so the mini-trend actually matches. */
   var d = state.data;
-  if (!d || !d.trend || !d.trend.months) return null;
-  var months = d.trend.months;
-  var acc = d.trend.accounting || {};
-  var pos = d.trend.pos || {};
-  var suf = curLoc() === 'combined' ? '' : '_' + curLoc(); /* per-shop revenue/cogs/count arrays */
-  var revA = acc['revenue' + suf], cogA = acc['cogs' + suf], cntA = pos['count' + suf];
+  var weekly = granularity === 'weekly';
+  if (weekly) {
+    if (!d || !d.trendW || !d.trendW.weekStarts) return null;
+  } else {
+    if (!d || !d.trend || !d.trend.months) return null;
+  }
+  var buckets = weekly ? d.trendW.weekStarts : d.trend.months;
+  var acc = (weekly ? d.trendW.accounting : d.trend.accounting) || {};
+  var pos = (weekly ? d.trendW.pos : d.trend.pos) || {};
+  var loc = locOverride || curLoc();
   function at(arr, i) { return (arr && arr[i] != null) ? arr[i] : null; }
+
+  /* Combined + both per-shop live arrays are needed regardless of the
+     requested loc, since a combined figure with only one shop's entry given
+     still needs the OTHER shop's live number plus any untagged remainder -
+     exactly what periodValues()'s combined()/untagged() do for a single slot. */
+  function ovNum(ov, shop, field) { var o = ov && ov[shop]; return (o && typeof o[field] === 'number' && isFinite(o[field])) ? o[field] : null; }
+  function shopEff(ov, shop, field, live) { var o = ovNum(ov, shop, field); return o != null ? o : live; }
+  function combinedEff(ov, field, combinedLive, wLive, rLive) {
+    if (ov && typeof ov[field] === 'number' && isFinite(ov[field])) return ov[field]; /* legacy single combined entry */
+    var wOv = ovNum(ov, 'windsor', field), rOv = ovNum(ov, 'richmond', field);
+    if (wOv == null && rOv == null) return combinedLive;
+    var untagged = (wLive != null && rLive != null) ? (combinedLive - wLive - rLive) : 0;
+    return (shopEff(ov, 'windsor', field, wLive) || 0) + (shopEff(ov, 'richmond', field, rLive) || 0) + (untagged || 0);
+  }
+  function effField(field, arrBase, i, ov) {
+    var combinedLive = at(arrBase[''], i), wLive = at(arrBase['windsor'], i), rLive = at(arrBase['richmond'], i);
+    if (loc === 'combined') return combinedEff(ov, field, combinedLive, wLive, rLive);
+    return shopEff(ov, loc, field, loc === 'windsor' ? wLive : rLive);
+  }
+  function effCount(i, ub) {
+    var combinedLive = at(pos['count'], i), wLive = at(pos['count_windsor'], i), rLive = at(pos['count_richmond'], i);
+    var live = loc === 'combined' ? combinedLive : (loc === 'windsor' ? wLive : rLive);
+    var uberNum = function (shop) { var v = ub && ub[shop]; return (typeof v === 'number' && isFinite(v)) ? v : 0; };
+    var extra = loc === 'combined' ? (uberNum('windsor') + uberNum('richmond')) : uberNum(loc);
+    if (live == null) return extra > 0 ? extra : null;
+    return live + extra;
+  }
+  var revArr = { '': acc['revenue'], windsor: acc['revenue_windsor'], richmond: acc['revenue_richmond'] };
+  var cogArr = { '': acc['cogs'], windsor: acc['cogs_windsor'], richmond: acc['cogs_richmond'] };
+
   function val(i) {
-    var rev = at(revA, i);
+    var br = trendBucketRange(buckets[i], weekly);
+    var ov = overrideForRange(br.from, br.to);
+    var ub = uberForRange(br.from, br.to);
+    var rev = effField('revenue', revArr, i, ov);
     if (key === 'revenue') return rev;
-    if (key === 'transactions') return at(cntA, i);
-    if (key === 'acs') { var c = at(cntA, i); return (rev == null || c == null || c === 0) ? null : rev / c; }
+    if (key === 'transactions') return effCount(i, ub);
+    if (key === 'acs') { var c = effCount(i, ub); return (rev == null || c == null || c === 0) ? null : rev / c; }
     if (rev == null || rev === 0) return null;
-    var cg = at(cogA, i), wg = at(acc.wagesSuper, i), oh = at(acc.overheads, i);
+    var cg = effField('cogs', cogArr, i, ov), wg = at(acc.wagesSuper, i), oh = at(acc.overheads, i);
     if (key === 'cogs') return (cg == null) ? null : (cg / rev) * 100;
     if (key === 'overheads') return (oh == null) ? null : (oh / rev) * 100;
     if (key === 'wage') return (wg == null) ? null : (wg / rev) * 100;
     if (key === 'profit') return (cg == null || wg == null || oh == null) ? null : ((rev - cg - wg - oh) / rev) * 100;
     return null;
   }
-  var series = months.map(function (m, i) { return val(i); });
+  var series = buckets.map(function (m, i) { return val(i); });
   if (!series.some(function (x) { return x != null; })) return null;
-  return { months: months, values: series };
+  return { months: buckets, values: series };
 }
 /* Card headline: dual %/$ for share metrics, single value otherwise. */
 function headline(key, vals, v) {
@@ -1293,25 +1722,28 @@ function headline(key, vals, v) {
   return wrap;
 }
 
-/* Target meter: fill to the value, a marker at the target, coloured by whether
-   the value is on the good side. Null when no target is set. */
+/* Target meter: fill to the value, a marker at the target, coloured by a
+   3-zone read (good/warn/bad) from targetZone() - so "close to target" and
+   "way past it" never share a color. Null when no target is set. */
 function targetMeter(key, pf) {
   var t = metricTarget(key);
   if (t == null || pf == null || pf === 'dash') return null;
   var def = METRIC_DEFS[key];
-  var bad = (def.goodDir === 'down') ? (pf > t) : (pf < t);
+  var zone = targetZone(key, pf); /* 'good' | 'warn' | 'bad' */
   var scale = Math.max(pf, t) * 1.4; if (!(scale > 0)) scale = 1;
   var wrap = el('div', 'meter');
   var track = el('div', 'meter-track');
-  var fl = el('div', 'meter-fill ' + (bad ? 'bad' : 'good'));
+  var fl = el('div', 'meter-fill ' + zone);
   fl.style.width = Math.max(0, Math.min(100, (pf / scale) * 100)).toFixed(1) + '%';
   var mk = el('div', 'meter-mark');
   mk.style.left = Math.max(0, Math.min(100, (t / scale) * 100)).toFixed(1) + '%';
   track.appendChild(fl); track.appendChild(mk);
   wrap.appendChild(track);
-  var status = bad ? (def.goodDir === 'down' ? 'over target' : 'below target') : 'on track';
+  var status = zone === 'good' ? 'on track'
+    : zone === 'warn' ? 'close to target'
+    : (def.goodDir === 'down' ? 'over target' : 'below target');
   var cap = el('div', 'meter-cap');
-  cap.innerHTML = 'Target ' + esc(fmtTarget(key, t)) + ' · <span class="' + (bad ? 'bad' : 'good') + '">' + status + '</span>';
+  cap.innerHTML = 'Target ' + esc(fmtTarget(key, t)) + ' · <span class="' + zone + '">' + status + '</span>';
   wrap.appendChild(cap);
   return wrap;
 }
