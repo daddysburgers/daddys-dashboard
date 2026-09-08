@@ -2247,6 +2247,13 @@ function renderSettings(root) {
   var c1 = el('div', 'set-cell');
   c1.appendChild(el('div', 'set-label', 'Venue name'));
   var vn = document.createElement('input'); vn.type = 'text'; vn.value = SETTINGS.venueName; vn.maxLength = 60;
+  /* Save on every keystroke (not just onchange/blur) - on mobile, tapping straight
+     from this field to a nav tab can beat the blur/change event to the screen
+     rebuild, so a change that never got a chance to blur first would silently
+     never save. Saving on input guarantees the latest text is persisted the
+     instant it's typed; onchange still does the full re-render once you're done,
+     for the topbar title and the empty-string fallback. */
+  vn.oninput = function () { if (vn.value) { SETTINGS.venueName = vn.value; saveSettings(); } };
   vn.onchange = function () { SETTINGS.venueName = vn.value || 'Your venue'; saveSettings(); render(); };
   c1.appendChild(vn);
   grid.appendChild(c1);
@@ -2332,6 +2339,13 @@ function renderSettings(root) {
     var inp = document.createElement('input'); inp.type = 'number'; inp.step = 'any';
     inp.value = (SETTINGS.targets && typeof SETTINGS.targets[k] === 'number') ? SETTINGS.targets[k] : '';
     inp.placeholder = (mdef.goodDir === 'down' ? 'alert if above' : 'alert if below');
+    /* Same fix as Venue name above: save on every keystroke, not just on blur,
+       so a quick tap straight to another nav tab can never race past an unsaved
+       edit and make it look like the target "reverted". */
+    inp.oninput = function () {
+      var val = parseFloat(inp.value);
+      if (isFinite(val)) { if (!SETTINGS.targets) SETTINGS.targets = {}; SETTINGS.targets[k] = val; saveSettings(); }
+    };
     inp.onchange = function () {
       if (!SETTINGS.targets) SETTINGS.targets = {};
       var val = parseFloat(inp.value);
