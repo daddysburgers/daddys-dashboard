@@ -527,8 +527,8 @@ var METRIC_DEFS = {
 var CHOSEN = KIT_CONFIG.metrics.filter(function (k) { return METRIC_DEFS[k]; });
 
 var SOURCES = [
-  { key: 'accounting', name: P.accounting, role: 'Money figures (' + KIT_CONFIG.taxLabel + ')' },
-  { key: 'pos',        name: P.pos,        role: 'Transaction count' }
+  { key: 'accounting', name: P.accounting, role: 'Money figures (' + KIT_CONFIG.taxLabel + ')', auth: 'oauth' },
+  { key: 'pos',        name: P.pos,        role: 'Transaction count', auth: 'token' }
 ];
 if (P.rostering) SOURCES.push({ key: 'rostering', name: P.rostering, role: 'Projected wages (optional)' });
 
@@ -3346,7 +3346,9 @@ function renderConnections(root) {
     }
 
     var act = el('div', 'conn-actions');
-    if (st.configured) {
+    if (st.configured && s.auth === 'token') {
+      act.appendChild(el('span', 'conn-line', 'This connection uses a pasted key, not a login — there’s no Reconnect button for it. If it stops working, the key needs replacing in Cloudflare (Settings → Variables and Secrets), not here.'));
+    } else if (st.configured) {
       var rec = el('button', 'btn-plain', st.connected ? 'Reconnect' : 'Connect');
       rec.onclick = function () { window.location.href = '/auth/' + s.key + '/start'; };
       act.appendChild(rec);
@@ -3355,9 +3357,11 @@ function renderConnections(root) {
     }
     card.appendChild(act);
 
-    var cb = el('div', 'cb-url');
-    cb.innerHTML = 'Callback address for this connection (your AI may ask for it): <b>' + esc(location.origin + '/auth/' + s.key + '/callback') + '</b>';
-    card.appendChild(cb);
+    if (s.auth === 'oauth') {
+      var cb = el('div', 'cb-url');
+      cb.innerHTML = 'Callback address for this connection (your AI may ask for it): <b>' + esc(location.origin + '/auth/' + s.key + '/callback') + '</b>';
+      card.appendChild(cb);
+    }
 
     if (st.ingest) card.appendChild(uploadPanel(s));
 
