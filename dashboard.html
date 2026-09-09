@@ -456,6 +456,7 @@ function defaultSettings() {
     accent: 'gold',
     dataMode: KIT_CONFIG.startLevel === 'manual' ? 'manual' : 'live',
     location: 'combined',    /* combined | windsor | richmond */
+    viewMode: 'reported',    /* reported (card+online only) | adjusted (All Sales + Discounts entered below) */
     targets: { cogs: 30, wage: 30, overheads: 30, profit: 10 }
   };
 }
@@ -851,6 +852,21 @@ function periodValues(slot, locOverride) {  /* slot: 'cur' | 'prev' | 'yoy'. loc
   }
   function ovNum(loc, field) { var o = ov[loc]; return (o && typeof o[field] === 'number' && isFinite(o[field])) ? o[field] : null; }
   function shopVal(loc, field, liveFn) { var o = ovNum(loc, field); return o != null ? o : liveFn(loc); }
+  /* Discounts have no live source at all - purely typed in, and additive
+     across shops (never overlaid on a live figure the way revenue/cogs are). */
+  function manualOnly(field) {
+    var w = ovNum('windsor', field), r = ovNum('richmond', field);
+    if (w == null && r == null) return null;
+    return (w || 0) + (r || 0);
+  }
+  /* Adjusted (All Sales) revenue for one shop: the shop's own typed All Sales
+     figure if given, else its Reported revenue - plus Discounts on top. Null
+     only when NEITHER an All Sales figure nor a discount was typed, so
+     revenueFor() below falls back cleanly to the plain Reported figure. */
+  function shopAdjusted(reportedRevenue, allSales, discount) {
+    if (allSales == null && discount == null) return null;
+    return (allSales != null ? allSales : (reportedRevenue || 0)) + (discount || 0);
+  }
   function untagged(field, liveFn) {
     return (acc && aLoc.windsor && aLoc.richmond) ? (num(acc[field]) - num(aLoc.windsor[field]) - num(aLoc.richmond[field])) : 0;
   }
@@ -874,16 +890,36 @@ function periodValues(slot, locOverride) {  /* slot: 'cur' | 'prev' | 'yoy'. loc
     out.count = countPlusUber('combined');
     out._uberAdded = uberNum('windsor') + uberNum('richmond');
     if (ros) out.rosteredCost = num(ros.cost);
+    out.discount = manualOnly('discount'); if (out.discount != null) out._manual.discount = true;
+    var wAll = ovNum('windsor', 'revenueAll'), rAll = ovNum('richmond', 'revenueAll');
+    if (wAll == null && rAll == null && out.discount == null) {
+      out.revenueAdjusted = null;
+    } else {
+      var wRevRep = shopVal('windsor', 'revenue', liveRev), rRevRep = shopVal('richmond', 'revenue', liveRev);
+      out.revenueAdjusted = (wAll != null ? wAll : (wRevRep || 0)) + (rAll != null ? rAll : (rRevRep || 0)) + (out.discount || 0);
+      if (wAll != null || rAll != null) out._manual.revenueAll = true;
+    }
   } else {
     out.revenue = shopVal(loc, 'revenue', liveRev); if (ovNum(loc, 'revenue') != null) out._manual.revenue = true;
     out.cogs = shopVal(loc, 'cogs', liveCogs); if (ovNum(loc, 'cogs') != null) out._manual.cogs = true;
     out.wagesSuper = null; out.overheads = null; /* combined-only metrics */
     out.count = countPlusUber(loc);
     out._uberAdded = uberNum(loc);
+    out.discount = ovNum(loc, 'discount'); if (out.discount != null) out._manual.discount = true;
+    var allSales = ovNum(loc, 'revenueAll'); if (allSales != null) out._manual.revenueAll = true;
+    out.revenueAdjusted = shopAdjusted(out.revenue, allSales, out.discount);
   }
   return out;
 }
 function num(v) { return (typeof v === 'number' && isFinite(v)) ? v : null; }
+/* The revenue figure every calc should use, given the current Reported/All
+   Sales toggle. "Adjusted" falls back to the reported figure when nothing's
+   been entered for All Sales/Discounts, so the toggle never produces a blank. */
+function revenueFor(vals) {
+  if (!vals) return null;
+  if (SETTINGS.viewMode === 'adjusted' && vals.revenueAdjusted != null) return vals.revenueAdjusted;
+  return vals.revenue;
+}
 /* Badge "Entered by you" ONLY on cards whose headline dollar figure was typed
    in. Wage %, Overheads, ACS and Profit still use whatever revenue is current
    (entered or live) as their base, but their own dollars stay live, so they are
@@ -891,7 +927,7 @@ function num(v) { return (typeof v === 'number' && isFinite(v)) ? v : null; }
 function usesManual(key, vals) {
   var m = vals && vals._manual;
   if (!m) return false;
-  if (key === 'revenue') return !!m.revenue;
+  if (key === 'revenue') return !!m.revenue || !!m.revenueAll || !!m.discount;
   if (key === 'cogs') return !!m.cogs;
   if (key === 'wage') return !!m.wagesSuper;
   if (key === 'overheads') return !!m.overheads;
@@ -916,7 +952,7 @@ function parseMoneyInput(s) {
    quietly showing a profit figure that's actually overstated. */
 function profitDollars(vals) {
   if (vals.revenue == null || vals.cogs == null || vals.wagesSuper == null) return null;
-  return vals.revenue - vals.cogs - vals.wagesSuper - (vals.overheads || 0);
+  return revenueFor(vals) - vals.cogs - vals.wagesSuper - (vals.overheads || 0);
 }
 function profitExcludesOverheads(vals) {
   return vals.revenue != null && vals.cogs != null && vals.wagesSuper != null && vals.overheads == null;
@@ -931,10 +967,11 @@ function shareDollars(key, vals) {
 }
 /* The % of revenue a dual metric represents (its primary headline figure). */
 function sharePct(key, vals) {
-  if (vals.revenue == null || vals.revenue === 0) return null;
+  var rev = revenueFor(vals);
+  if (rev == null || rev === 0) return null;
   var d = shareDollars(key, vals);
   if (d == null) return null;
-  return (d / vals.revenue) * 100;
+  return (d / rev) * 100;
 }
 /* The figure a target/meter applies to: the % for dual metrics, the value
    otherwise. Revenue has no target (it uses a benchmark). */
@@ -950,19 +987,21 @@ function fmtTarget(key, t) {
 
 /* metric value for a slot; null = no data; 'zero-count' handled by caller */
 function metricValue(key, vals) {
-  if (key === 'revenue') return vals.revenue;
+  if (key === 'revenue') return revenueFor(vals);
   if (key === 'transactions') return vals.count;
   if (key === 'cogs') return vals.cogs;
   if (key === 'overheads') return vals.overheads;
   if (key === 'profit') return profitDollars(vals);
   if (key === 'wage') {
-    if (vals.wagesSuper == null || vals.revenue == null || vals.revenue === 0) return null;
-    return (vals.wagesSuper / vals.revenue) * 100;
+    var rev = revenueFor(vals);
+    if (vals.wagesSuper == null || rev == null || rev === 0) return null;
+    return (vals.wagesSuper / rev) * 100;
   }
   if (key === 'acs') {
-    if (vals.revenue == null || vals.count == null) return null;
+    var rev2 = revenueFor(vals);
+    if (rev2 == null || vals.count == null) return null;
     if (vals.count === 0) return 'dash';
-    return vals.revenue / vals.count;
+    return rev2 / vals.count;
   }
   return null;
 }
@@ -1135,7 +1174,11 @@ function validateRecipeData() {
   var problems = [];
   Object.keys(RECIPE_DATA.recipes).forEach(function (key) {
     var rec = RECIPE_DATA.recipes[key];
-    if (!rec.lines.length) problems.push('"' + rec.display + '" has no ingredients.');
+    /* A $0, non-rollup item with no lines is a deliberate null-selection
+       placeholder (e.g. "No Extra Sauce") - not a mistake to flag. Anything
+       else with zero ingredients is a real gap and still blocks saving. */
+    var isPlaceholder = rec.lines.length === 0 && Number(rec.sellPrice) === 0 && rec.inRollup === false;
+    if (!rec.lines.length && !isPlaceholder) problems.push('"' + rec.display + '" has no ingredients.');
     rec.lines.forEach(function (line) {
       var kind = inferLineKind(key, line.ingredient);
       if (!kind) {
@@ -1561,6 +1604,18 @@ function esc(s) {
 }
 
 /* ---------- Dashboard view ---------- */
+/* Reported (card + online only) vs All Sales (your own typed All Sales
+   revenue figure, plus discounts given, wherever you've entered them below) -
+   one switch drives every figure on both this view and Manager, via
+   revenueFor()/trendSeries(). */
+function appendViewToggle(container) {
+  container.appendChild(el('span', 'period-label', 'View'));
+  [['reported', 'Reported'], ['adjusted', 'All Sales']].forEach(function (o) {
+    var c = el('button', 'pchip' + (SETTINGS.viewMode === o[0] ? ' on' : ''), o[1]);
+    c.onclick = function () { SETTINGS.viewMode = o[0]; saveSettings(); render(); };
+    container.appendChild(c);
+  });
+}
 function renderDashboard(root) {
   var r = resolvePeriod(state.period, state.customFrom, state.customTo);
   var pp = periodParts(state.period);
@@ -1612,6 +1667,7 @@ function renderDashboard(root) {
     c.onclick = function () { SETTINGS.location = o[0]; saveSettings(); render(); };
     right.appendChild(c);
   });
+  appendViewToggle(right);
   controlBar.appendChild(right);
   root.appendChild(controlBar);
 
@@ -1708,6 +1764,9 @@ function renderDashboard(root) {
    numbers so nothing important gets missed reading digits cold. */
 var MGR_SPARK_METRICS = ['revenue', 'transactions', 'acs']; /* magnitude metrics: no target, shown as trend */
 var MGR_TARGET_METRICS = ['cogs', 'wage', 'overheads', 'profit']; /* %-of-revenue metrics: shown as a target meter */
+/* Wages, Overheads and Profit are owner-only figures - Manager view never
+   shows them, in the takeaway/callback sentences or the cards themselves. */
+var MGR_HIDDEN_METRICS = ['wage', 'overheads', 'profit'];
 
 function managerLabel(loc) { return loc === 'combined' ? 'Combined' : (loc === 'windsor' ? 'Windsor' : 'Richmond'); }
 
@@ -1724,7 +1783,7 @@ function managerTakeaway(loc, cur, prev) {
   });
   var worst = null; /* { key, zone, pf, t } */
   MGR_TARGET_METRICS.forEach(function (k) {
-    if (loc !== 'combined' && ['wage', 'overheads', 'profit'].indexOf(k) >= 0) return; /* combined-only */
+    if (MGR_HIDDEN_METRICS.indexOf(k) >= 0) return; /* owner-only, never surfaced to managers */
     var pf = primaryFigure(k, cur);
     var zone = targetZone(k, pf);
     if (!zone || zone === 'good') return;
@@ -1760,7 +1819,7 @@ function managerTakeaway(loc, cur, prev) {
 function managerCallback(loc, cur, prev) {
   var lines = [];
   MGR_TARGET_METRICS.forEach(function (k) {
-    if (loc !== 'combined' && ['wage', 'overheads', 'profit'].indexOf(k) >= 0) return;
+    if (MGR_HIDDEN_METRICS.indexOf(k) >= 0) return; /* owner-only, never surfaced to managers */
     var curZone = targetZone(k, primaryFigure(k, cur));
     var prevZone = targetZone(k, primaryFigure(k, prev));
     if (!curZone || !prevZone) return;
@@ -1805,7 +1864,14 @@ function managerSparkRow(key, loc, r) {
     if (tgt != null && max > 0) {
       var tline = document.createElement('div');
       tline.className = 'mgr-target-line';
-      tline.style.bottom = Math.max(0, Math.min(100, (tgt / max) * 100)).toFixed(1) + '%';
+      /* Same edge-clamp as the main Dashboard's trend chart (trendBars): when
+         trade runs consistently well clear of target, the raw percentage
+         lands right on 0% or 100% - exactly on the container's own edge,
+         where it's indistinguishable from the row's top/bottom and reads as
+         "not there" even though it's technically rendered. */
+      var pct = (tgt / max) * 100;
+      pct = Math.max(4, Math.min(96, pct));
+      tline.style.bottom = pct.toFixed(1) + '%';
       spark.appendChild(tline);
     }
     attachBarTip(spark);
@@ -1826,6 +1892,27 @@ function managerValCell(key, cur, prev) {
   var deltaTxt = !cmp ? 'no data yet' : ((cmp.dir === 'up' ? '▲ ' : cmp.dir === 'down' ? '▼ ' : '● ') + cmp.text);
   cell.appendChild(el('span', 'mgr-cell-delta ' + deltaCls, esc(deltaTxt)));
   return cell;
+}
+
+/* Discounts given - always shown to managers even though Wage/Overheads/
+   Profit are hidden from this view (see MGR_HIDDEN_METRICS). On Combined,
+   breaks out each store's figure too, since "per store" is the point. */
+function managerDiscountRow(loc, cur) {
+  var row = el('div', 'mgr-row');
+  row.appendChild(el('div', 'mgr-lab', 'Discounts given'));
+  var viz = el('div', 'mgr-viz');
+  var cell = el('div', 'mgr-val');
+  if (loc === 'combined') {
+    var w = periodValues('cur', 'windsor'), rr = periodValues('cur', 'richmond');
+    viz.appendChild(el('span', 'flat', 'Windsor ' + (w.discount == null ? '—' : fmtMoney(w.discount, false))
+      + ' · Richmond ' + (rr.discount == null ? '—' : fmtMoney(rr.discount, false))));
+  } else {
+    viz.appendChild(el('span', 'flat', esc(managerLabel(loc)) + ' only'));
+  }
+  cell.appendChild(el('span', 'mgr-cell-val', cur.discount == null ? '—' : fmtMoney(cur.discount, false)));
+  row.appendChild(viz);
+  row.appendChild(cell);
+  return row;
 }
 
 function managerMeterRow(key, cur) {
@@ -1896,6 +1983,7 @@ function renderManager(root) {
     c.onclick = function () { state.managerLoc = o[0]; render(); };
     right.appendChild(c);
   });
+  appendViewToggle(right);
   controlBar.appendChild(right);
   root.appendChild(controlBar);
 
@@ -1918,10 +2006,11 @@ function renderManager(root) {
   head.appendChild(el('div', 'mgr-when', esc(fmtRange(r)) + ' · ' + esc(r.prevLabel)));
   card.appendChild(head);
 
-  CHOSEN.filter(function (k) { return loc === 'combined' || shopMetrics.indexOf(k) >= 0; }).forEach(function (k) {
+  CHOSEN.filter(function (k) { return MGR_HIDDEN_METRICS.indexOf(k) < 0 && (loc === 'combined' || shopMetrics.indexOf(k) >= 0); }).forEach(function (k) {
     if (MGR_SPARK_METRICS.indexOf(k) >= 0) card.appendChild(managerSparkRowWithVal(k, loc, cur, prev, r));
     else card.appendChild(managerMeterRow(k, cur));
   });
+  card.appendChild(managerDiscountRow(loc, cur));
 
   root.appendChild(card);
 }
@@ -1946,10 +2035,10 @@ function overridePanel(r) {
   det.style.cssText = 'background:var(--cream2);border:1px solid var(--border);border-radius:12px;padding:10px 14px;margin:0 0 14px;font-size:13px';
   var sum = document.createElement('summary');
   sum.style.cssText = 'cursor:pointer;font-weight:500;color:var(--black)';
-  sum.textContent = (has ? '✎ Your figures for ' : '✎ Enter your own Revenue / Cost of goods / Uber Eats orders for ') + periodLabel().toLowerCase() + (has ? ' — edit' : ' (optional)');
+  sum.textContent = (has ? '✎ Your figures for ' : '✎ Enter your own Revenue / Cost of goods / Discounts / Uber Eats orders for ') + periodLabel().toLowerCase() + (has ? ' — edit' : ' (optional)');
   det.appendChild(sum);
 
-  var hint = el('div', null, 'Type each shop’s Revenue and Cost of goods for this period — the board uses your figures (marked “Entered by you”) and the Combined view adds them up. Transactions stay live from Square; add Uber Eats orders below and they’re added on top of the Square count, not instead of it. Leave any box blank to keep using the live figure.');
+  var hint = el('div', null, 'Type each shop’s Revenue and Cost of goods for this period — the board uses your figures (marked “Entered by you”) and the Combined view adds them up. Revenue (All Sales) and Discounts given are separate figures used only when you flick the View toggle above to “All Sales” — they never overlay or replace your plain Revenue figure, they’re just an alternate total. Transactions stay live from Square; add Uber Eats orders below and they’re added on top of the Square count, not instead of it. Leave any box blank to keep using the live figure.');
   hint.style.cssText = 'color:var(--muted);margin:8px 0 10px;line-height:1.6';
   det.appendChild(hint);
 
@@ -1971,10 +2060,12 @@ function overridePanel(r) {
     var row = el('div'); row.style.cssText = 'display:flex;flex-wrap:wrap;align-items:flex-end';
     var rev = field('Revenue (ex-GST)', savedOv.revenue, '$', false);
     var cog = field('Cost of goods', savedOv.cogs, '$', false);
+    var all = field('Revenue (All Sales, ex-GST)', savedOv.revenueAll, '$', false);
+    var dis = field('Discounts given (ex-GST)', savedOv.discount, '$', false);
     var ubi = field('Uber Eats orders (added to Square)', savedUberCount, 'e.g. 42', true);
-    row.appendChild(rev.parentNode); row.appendChild(cog.parentNode); row.appendChild(ubi.parentNode);
+    row.appendChild(all.parentNode); row.appendChild(rev.parentNode); row.appendChild(dis.parentNode); row.appendChild(cog.parentNode); row.appendChild(ubi.parentNode);
     box.appendChild(row);
-    return { rev: rev, cog: cog, uber: ubi, box: box };
+    return { rev: rev, cog: cog, all: all, disc: dis, uber: ubi, box: box };
   }
   var win = shopFields('Windsor', ov.windsor || {}, ub.windsor);
   var rich = shopFields('Richmond', ov.richmond || {}, ub.richmond);
@@ -2005,7 +2096,8 @@ function overridePanel(r) {
     var ratio = val / prior;
     if (ratio >= 0.3 && ratio <= 3) return null;
     var shopLabel = loc === 'windsor' ? 'Windsor' : 'Richmond';
-    var fieldLabel = field === 'revenue' ? 'Revenue' : 'Cost of goods';
+    var fieldLabels = { revenue: 'Revenue', cogs: 'Cost of goods', revenueAll: 'Revenue (All Sales)', discount: 'Discounts given' };
+    var fieldLabel = fieldLabels[field] || field;
     return fieldLabel + ' for ' + shopLabel + ': ' + fmtMoney(val) + ' vs ' + fmtMoney(prior) + ' last time (' + (ratio > 1 ? Math.round(ratio * 10) / 10 + '×' : Math.round(ratio * 100) + '%') + ')';
   }
 
@@ -2013,7 +2105,14 @@ function overridePanel(r) {
   var save = el('button', 'btn-small', 'Save my figures');
   save.onclick = function () {
     var o = {}, u = {};
-    function shopOv(f) { var s = {}; var rv = parseMoneyInput(f.rev.value); if (rv != null) s.revenue = rv; var cv = parseMoneyInput(f.cog.value); if (cv != null) s.cogs = cv; return Object.keys(s).length ? s : null; }
+    function shopOv(f) {
+      var s = {};
+      var rv = parseMoneyInput(f.rev.value); if (rv != null) s.revenue = rv;
+      var cv = parseMoneyInput(f.cog.value); if (cv != null) s.cogs = cv;
+      var av = parseMoneyInput(f.all.value); if (av != null) s.revenueAll = av;
+      var dv = parseMoneyInput(f.disc.value); if (dv != null) s.discount = dv;
+      return Object.keys(s).length ? s : null;
+    }
     function shopUber(f) { var n = parseInt(String(f.uber.value).replace(/[^0-9]/g, ''), 10); return (isFinite(n) && n >= 0 && String(f.uber.value).trim() !== '') ? n : null; }
     var w = shopOv(win); if (w) o.windsor = w;
     var rr = shopOv(rich); if (rr) o.richmond = rr;
@@ -2024,7 +2123,7 @@ function overridePanel(r) {
     ['windsor', 'richmond'].forEach(function (loc) {
       var s = (loc === 'windsor') ? w : rr;
       if (!s) return;
-      ['revenue', 'cogs'].forEach(function (field) {
+      ['revenue', 'cogs', 'revenueAll', 'discount'].forEach(function (field) {
         if (typeof s[field] !== 'number') return;
         var note = outlierNote(loc, field, s[field]);
         if (note) notes.push(note);
@@ -2201,21 +2300,48 @@ function trendSeries(key, locOverride, granularity) {  /* locOverride lets a cal
   }
   var revArr = { '': acc['revenue'], windsor: acc['revenue_windsor'], richmond: acc['revenue_richmond'] };
   var cogArr = { '': acc['cogs'], windsor: acc['cogs_windsor'], richmond: acc['cogs_richmond'] };
+  /* Discounts have no live array (purely typed in) - additive across shops
+     when combined, same rule as periodValues()'s manualOnly(). */
+  function ovOnly(ov, field) {
+    if (!ov) return null;
+    if (loc !== 'combined') return ovNum(ov, loc, field);
+    var w = ovNum(ov, 'windsor', field), r = ovNum(ov, 'richmond', field);
+    if (w == null && r == null) return null;
+    return (w || 0) + (r || 0);
+  }
 
   function val(i) {
     var br = trendBucketRange(buckets[i], weekly);
     var ov = overrideForRange(br.from, br.to);
     var ub = uberForRange(br.from, br.to);
     var rev = effField('revenue', revArr, i, ov);
-    if (key === 'revenue') return rev;
+    var disc = ovOnly(ov, 'discount');
+    /* Revenue (All Sales): each shop's own typed figure if given, else that
+       shop's own Reported revenue - mirrors periodValues()'s shopAdjusted(),
+       so a trend bucket matches its own card exactly. */
+    var effRev = rev;
+    if (SETTINGS.viewMode === 'adjusted') {
+      if (loc === 'combined') {
+        var wAllV = ovNum(ov, 'windsor', 'revenueAll'), rAllV = ovNum(ov, 'richmond', 'revenueAll');
+        if (wAllV != null || rAllV != null || disc != null) {
+          var wRevEff = shopEff(ov, 'windsor', 'revenue', at(revArr['windsor'], i));
+          var rRevEff = shopEff(ov, 'richmond', 'revenue', at(revArr['richmond'], i));
+          effRev = (wAllV != null ? wAllV : (wRevEff || 0)) + (rAllV != null ? rAllV : (rRevEff || 0)) + (disc || 0);
+        }
+      } else {
+        var allV = ovNum(ov, loc, 'revenueAll');
+        if (allV != null || disc != null) effRev = (allV != null ? allV : (rev || 0)) + (disc || 0);
+      }
+    }
+    if (key === 'revenue') return effRev;
     if (key === 'transactions') return effCount(i, ub);
-    if (key === 'acs') { var c = effCount(i, ub); return (rev == null || c == null || c === 0) ? null : rev / c; }
-    if (rev == null || rev === 0) return null;
+    if (key === 'acs') { var c = effCount(i, ub); return (effRev == null || c == null || c === 0) ? null : effRev / c; }
+    if (effRev == null || effRev === 0) return null;
     var cg = effField('cogs', cogArr, i, ov), wg = at(acc.wagesSuper, i), oh = at(acc.overheads, i);
-    if (key === 'cogs') return (cg == null) ? null : (cg / rev) * 100;
-    if (key === 'overheads') return (oh == null) ? null : (oh / rev) * 100;
-    if (key === 'wage') return (wg == null) ? null : (wg / rev) * 100;
-    if (key === 'profit') return (cg == null || wg == null || oh == null) ? null : ((rev - cg - wg - oh) / rev) * 100;
+    if (key === 'cogs') return (cg == null) ? null : (cg / effRev) * 100;
+    if (key === 'overheads') return (oh == null) ? null : (oh / effRev) * 100;
+    if (key === 'wage') return (wg == null) ? null : (wg / effRev) * 100;
+    if (key === 'profit') return (cg == null || wg == null || oh == null) ? null : ((effRev - cg - wg - oh) / effRev) * 100;
     return null;
   }
   var series = buckets.map(function (m, i) { return val(i); });
@@ -2391,9 +2517,18 @@ function trendBars(key, r) {
     svg.appendChild(rect);
   }
   /* A dashed line across the trend at the target level, so it's visible at a
-     glance which bars cleared it and which didn't - not just the current one. */
+     glance which bars cleared it and which didn't - not just the current one.
+     Clamped a couple of px in from the very top/bottom edge: when trade is
+     running consistently well clear of target (e.g. Overheads sitting at 6%
+     against a 30% target), the raw math lands the line exactly on y=0 or y=H
+     - right on the SVG boundary, where a 1px stroke centered on the edge is
+     half-clipped by the viewBox and all but disappears. A small inset keeps
+     it fully visible on every card, not just the ones whose trend happens to
+     hover near target already. */
   if (tgt != null) {
     var tY = H - ((tgt - minv) / span) * H;
+    var edgeInset = 2;
+    tY = Math.max(edgeInset, Math.min(H - edgeInset, tY));
     var line = document.createElementNS(NS, 'line');
     line.setAttribute('class', 'ttarget-line');
     line.setAttribute('x1', '0'); line.setAttribute('x2', String(W));
