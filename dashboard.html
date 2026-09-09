@@ -278,6 +278,7 @@ body {
 .tbar.cur { stroke: var(--text); stroke-width: 0.8; }
 .tbar { cursor: default; }
 .tbar:hover { opacity: 0.78; }
+.ttarget-line { stroke: var(--text); stroke-width: 1; stroke-dasharray: 4 2; opacity: 0.55; pointer-events: none; }
 
 /* 3-zone target meter (on target / close / over) - the same red/amber/green
    used everywhere else a target is judged, never a 2-color good/bad only. */
@@ -1864,10 +1865,13 @@ function trendBars(key, r) {
   var n = t.values.length, start = weekly ? 0 : Math.max(0, n - 12);
   var buckets = t.months.slice(start), vals = t.values.slice(start);
   var shown = vals.filter(function (x) { return x != null; });
-  var maxv = Math.max.apply(null, shown.concat([0]));
-  var minv = Math.min.apply(null, shown.concat([0]));
-  var span = (maxv - minv) || 1;
   var def = METRIC_DEFS[key], tgt = metricTarget(key);
+  /* Widen the chart's own scale to always include the target, so the target
+     line is never drawn off the top/bottom of the chart just because trade
+     has been consistently over or under it. */
+  var maxv = Math.max.apply(null, shown.concat([0], tgt != null ? [tgt] : []));
+  var minv = Math.min.apply(null, shown.concat([0], tgt != null ? [tgt] : []));
+  var span = (maxv - minv) || 1;
   var curBucket = weekly ? iso(r.from) : monthKey(r.from);
   var W = 280, H = 46, gap = 3, NS = 'http://www.w3.org/2000/svg';
   var bw = (W - gap * (vals.length - 1)) / vals.length;
@@ -1895,6 +1899,17 @@ function trendBars(key, r) {
     var lab = weekly ? ('wk of ' + fmtShortDate(fromIso(buckets[i]))) : buckets[i];
     rect.setAttribute('data-lab', lab + ' · ' + trendLabel(key, vals[i]));
     svg.appendChild(rect);
+  }
+  /* A dashed line across the trend at the target level, so it's visible at a
+     glance which bars cleared it and which didn't - not just the current one. */
+  if (tgt != null) {
+    var tY = H - ((tgt - minv) / span) * H;
+    var line = document.createElementNS(NS, 'line');
+    line.setAttribute('class', 'ttarget-line');
+    line.setAttribute('x1', '0'); line.setAttribute('x2', String(W));
+    line.setAttribute('y1', tY.toFixed(1)); line.setAttribute('y2', tY.toFixed(1));
+    line.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.appendChild(line);
   }
   var holder = el('div', 'tbars-svg');
   holder.appendChild(svg);
