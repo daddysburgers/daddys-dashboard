@@ -225,6 +225,8 @@ body {
 .cost-row-over { background: var(--c-coral-bg); border-radius: 8px; }
 .cost-row-over .cost-col-name, .cost-row-over .cost-col-num { color: #6b2510; }
 .cost-row-over .cost-tag { color: #6b2510; background: rgba(107,37,16,0.1); }
+.cost-table-mix .cost-row { grid-template-columns: 1fr 70px 80px 90px 90px 80px; }
+@media (max-width: 640px) { .cost-table-mix .cost-row { grid-template-columns: 1fr 55px 60px; font-size: 12px; } .cost-table-mix .cost-col-num:nth-child(4), .cost-table-mix .cost-col-num:nth-child(5) { display: none; } }
 .cost-col-name { color: var(--black); }
 .cost-col-num { text-align: right; font-variant-numeric: tabular-nums; }
 .cost-tag { display: inline-block; font-size: 10.5px; font-weight: 600; color: var(--muted); background: var(--cream2); border-radius: 6px; padding: 1px 6px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.02em; }
@@ -234,6 +236,19 @@ body {
 .cost-ing-barwrap { background: var(--cream2); border-radius: 6px; height: 10px; overflow: hidden; }
 .cost-ing-bar { display: block; height: 100%; background: var(--accent); border-radius: 6px; }
 .cost-ing-val { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.cost-tag-bad { color: #6b2510; background: var(--c-coral-bg); }
+.btn-tiny { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; font-size: 11px; padding: 2px 7px; cursor: pointer; margin-left: 8px; }
+.btn-tiny:hover { color: var(--c-coral); border-color: var(--c-coral-border); }
+.btn-tiny-active { color: var(--accent); border-color: var(--accent); }
+.cost-inp { width: 70px; background: var(--cream2); border: 1px solid var(--border); border-radius: 6px; color: var(--black); font-size: 13px; padding: 3px 6px; text-align: right; font-variant-numeric: tabular-nums; }
+.cost-inp-wide { flex: 1; min-width: 140px; background: var(--cream2); border: 1px solid var(--border); border-radius: 6px; color: var(--black); font-size: 13px; padding: 3px 8px; }
+.cost-edit-item { background: var(--cream2); border-radius: 10px; padding: 0.8rem 0.9rem; margin-bottom: 10px; }
+.cost-edit-title { font-weight: 600; color: var(--black); font-size: 14.5px; }
+.cost-edit-fields { display: flex; flex-wrap: wrap; gap: 12px; margin: 0.5rem 0 0.6rem; align-items: center; }
+.cost-edit-field { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.cost-edit-flabel { white-space: nowrap; }
+.cost-row-batch input.cost-inp-wide { margin-right: 8px; }
+.cost-row-batch input.cost-inp { margin-right: 8px; }
 
 /* Settings */
 .set-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; max-width: 760px; }
@@ -991,7 +1006,7 @@ function targetZone(key, v) {
   return (Math.abs(v - t) <= TARGET_WARN_BAND) ? 'warn' : 'bad';
 }
 
-var RECIPE_DATA = {"raw":{"american mustard":{"display":"american mustard","measure":"bottle","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":9.43,"qty":920.0,"source":"sheet","unit":"Per mL"},"avocado":{"display":"avocado","measure":"box","note":"Windsor Farm Shop, current $41/tray (was $45 in sheet). Kane weighed one avocado at ~200g and estimated the tray at ~5kg (no count is printed on the invoice itself, checked 2026-09-09) - kept the sheet's existing 5000g-per-tray convention on that basis. Flagged as an estimate, not an invoiced weight.","price":41.0,"qty":5000.0,"source":"live","unit":"per gram"},"bacon":{"display":"bacon","measure":"box","note":"MAX(City Fine Food $11.80/kg, South Windsor Butchery $11.90/kg) per Kane \u2014 using SWB $11.90/kg x5000g","price":59.5,"qty":5000.0,"source":"live","unit":"Per Gram"},"bbq sauce":{"display":"bbq sauce","measure":"bottle","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":14.0,"qty":4000.0,"source":"sheet","unit":"Per mL"},"beef mince (100)":{"display":"beef mince (100)","measure":"bag","note":"South Windsor Butchery \u2014 80% Mince $12.90/kg, unchanged (100g balls, 80% fat, confirmed by Kane)","price":12.9,"qty":1000.0,"source":"live","unit":"Per Gram"},"beetroot":{"display":"beetroot","measure":"Can","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":11.5,"qty":3000.0,"source":"sheet","unit":"Per Gram"},"canola oil":{"display":"canola oil","measure":"box","note":"Oil2U \u2014 Canola Oil SPR3 Bulk (fresh) $2.40/L, unchanged","price":2.4,"qty":1000.0,"source":"live","unit":"per ml"},"cheese sauce":{"display":"cheese sauce","measure":"bottle","note":"City Fine Food \u2014 Cheese Sauce 1kg (Tatua), current (was $10.20)","price":10.5,"qty":1000.0,"source":"live","unit":"Per mL"},"cheese slice":{"display":"cheese slice","measure":"Pack","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":28.0,"qty":160.0,"source":"sheet","unit":"Per Slice"},"chicken bites":{"display":"chicken bites","measure":"bag","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":12.3,"qty":1000.0,"source":"sheet","unit":"per bite"},"chicken breast (180)":{"display":"chicken breast (180)","measure":"bag","note":"South Windsor Butchery \u2014 Sliced Chicken Fillet $14.30/kg, unchanged (confirmed by Kane)","price":14.3,"qty":1000.0,"source":"live","unit":"per breast"},"chicken tenders (80)":{"display":"chicken tenders (80)","measure":"bag","note":"South Windsor Butchery \u2014 Chicken Tenderloin $12.30/kg, unchanged","price":12.3,"qty":1000.0,"source":"live","unit":"per tender"},"chicken wings (160)":{"display":"chicken wings (160)","measure":"bag","note":"South Windsor Butchery \u2014 Chicken Wing $4.55/kg, unchanged","price":4.55,"qty":1000.0,"source":"live","unit":"per wing "},"chilli sauce":{"display":"chilli sauce","measure":"Bottle","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":7.4,"qty":730.0,"source":"sheet","unit":"Per mL"},"dijon mustard":{"display":"dijon mustard","measure":"bottle","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":20.5,"qty":2500.0,"source":"sheet","unit":"Per Gram"},"eggs":{"display":"eggs","measure":"box","note":"City Fine Food 600g/$65 ctn is the preferred size per Kane; they substitute the 700g/$85 ctn only when 600g is out of stock (not modelled separately - flagged as a variance source).","price":65.0,"qty":180.0,"source":"live","unit":"per egg"},"french fries":{"display":"french fries","measure":"box","note":"City Fine Food \u2014 Chips 7mm Shoestring 4x3kg (Edgell), current (was $43.00 in sheet)","price":41.66,"qty":12000.0,"source":"live","unit":"per gram"},"garlic fresh":{"display":"garlic fresh","measure":"pack ","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":10.0,"qty":1000.0,"source":"sheet","unit":"per gram "},"garlic powder":{"display":"garlic powder","measure":"bag","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":15.95,"qty":1000.0,"source":"sheet","unit":"per gram"},"gluten free buns":{"display":"gluten free buns","measure":"box","note":"Urbun Bakery \u2014 GF/Vegan Milk Bun $2.18 each x30","price":65.4,"qty":30.0,"source":"live","unit":"per bun"},"halloumi":{"display":"halloumi","measure":"Bag","note":"City Fine Food \u2014 Halloumi Cheese 750g, unchanged","price":15.8,"qty":750.0,"source":"live","unit":"Per Gram"},"honey":{"display":"honey","measure":"bottle ","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":18.5,"qty":3000.0,"source":"sheet","unit":"per gram "},"jalapeno":{"display":"jalapeno","measure":"tin","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":9.58,"qty":3000.0,"source":"sheet","unit":"Per Gram"},"juice":{"display":"juice","measure":"box","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":34.0,"qty":24.0,"source":"sheet","unit":"per bottle"},"lettuce":{"display":"lettuce","measure":"box","note":"Windsor Farm Shop \u2014 Lettuce Box(8) $15/box, unchanged (per-leaf conversion preserved from sheet)","price":15.0,"qty":2400.0,"source":"live","unit":" per leaf"},"onion":{"display":"onion","measure":"bag","note":"Windsor Farm Shop \u2014 Onions $15/box, unchanged","price":15.0,"qty":20000.0,"source":"live","unit":"per gram"},"onion powder":{"display":"onion powder","measure":"bag","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":10.0,"qty":1000.0,"source":"sheet","unit":"per gram"},"paprika":{"display":"paprika","measure":"bag","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":14.8,"qty":500.0,"source":"sheet","unit":"per gram"},"pickles":{"display":"pickles","measure":"box","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":45.0,"qty":15000.0,"source":"sheet","unit":"per gram"},"pineapple":{"display":"pineapple","measure":"tin","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":15.5,"qty":3000.0,"source":"sheet","unit":"Per Gram"},"potato bun":{"display":"Potato Bun","measure":"Box","note":"Urbun Bakery \u2014 Sliced Potato Bun $0.95 each x30","price":28.5,"qty":30.0,"source":"live","unit":"Per Bun"},"salt":{"display":"salt","measure":"bag","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":9.9,"qty":10000.0,"source":"sheet","unit":"Per Gram"},"shallots":{"display":"shallots","measure":"bag","note":"Windsor Farm Shop \u2014 Shallots $2/each, unchanged (per-gram conversion preserved from sheet)","price":2.0,"qty":80.0,"source":"live","unit":"Per Gram"},"slaw":{"display":"slaw","measure":"box","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":8.0,"qty":2000.0,"source":"sheet","unit":"per gram"},"soft drink":{"display":"soft drink","measure":"box","note":"City Fine Food \u2014 Coca-Cola Cans 24x375ml, current (was $30.00 in sheet)","price":29.36,"qty":24.0,"source":"live","unit":"each can"},"sugar":{"display":"sugar","measure":"pack","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":4.0,"qty":2000.0,"source":"sheet","unit":"per gram"},"sweet chilli":{"display":"sweet chilli","measure":"bottle","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":30.0,"qty":3000.0,"source":"sheet","unit":"per ml"},"tomato":{"display":"tomato","measure":"box","note":"Windsor Farm Shop \u2014 Tomatoes $70/box, unchanged","price":70.0,"qty":15000.0,"source":"live","unit":"per slice"},"tomato diced":{"display":"tomato diced","measure":"tin","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":8.7,"qty":2550.0,"source":"sheet","unit":"per ml"},"tomato sauce":{"display":"tomato sauce","measure":"bottle ","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":16.2,"qty":4000.0,"source":"sheet","unit":"per ml"},"unsalted butter":{"display":"unsalted butter","measure":"pack ","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":6.0,"qty":500.0,"source":"sheet","unit":"per gram "},"vinegar":{"display":"vinegar","measure":"box","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":17.2,"qty":20000.0,"source":"sheet","unit":"per ml"},"water":{"display":"water","measure":"bottle","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":null,"qty":1000.0,"source":"sheet","unit":"per ml"}},"recipes":{"aioli":{"category":"Bulk Recipe","display":"aioli","inRollup":false,"lines":[{"ingredient":"eggs","kind":"raw","qty":6.0},{"ingredient":"garlic fresh","kind":"raw","qty":80.0},{"ingredient":"canola oil","kind":"raw","qty":4000.0},{"ingredient":"salt","kind":"raw","qty":30.0},{"ingredient":"dijon mustard","kind":"raw","qty":60.0},{"ingredient":"water","kind":"raw","qty":900.0}],"portions":105.0,"sellPrice":1.5,"sellSource":"sheet"},"bacon":{"category":"add on","display":"bacon","inRollup":true,"lines":[{"ingredient":"bacon","kind":"raw-self","qty":80.0}],"portions":1.0,"sellPrice":3.0,"sellSource":"menu"},"bacon & egg burger":{"category":"burger","display":"bacon & egg burger","inRollup":true,"lines":[{"ingredient":"eggs","kind":"raw","qty":2.0},{"ingredient":"bacon","kind":"raw-self","qty":120.0},{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"bbq sauce","kind":"raw","qty":30.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0}],"portions":1.0,"sellPrice":12.0,"sellSource":"sheet"},"buffalo sauce":{"category":"bulk recipe","display":"buffalo sauce","inRollup":false,"lines":[{"ingredient":"chilli sauce","kind":"raw","qty":2190.0},{"ingredient":"vinegar","kind":"raw","qty":1100.0},{"ingredient":"unsalted butter","kind":"raw","qty":1000.0}],"portions":88.0,"sellPrice":1.5,"sellSource":"sheet"},"cheeky chick":{"category":"burger","display":"cheeky chick","inRollup":true,"lines":[{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"chicken breast (180)","kind":"raw","qty":180.0},{"ingredient":"slaw","kind":"raw","qty":80.0},{"ingredient":"avocado","kind":"raw","qty":30.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"bbq sauce","kind":"raw","qty":50.0},{"ingredient":"gluten free buns","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":18.2,"sellSource":"menu"},"cheese burger":{"category":"burger","display":"cheese burger","inRollup":true,"lines":[{"ingredient":"onion","kind":"raw","qty":25.0},{"ingredient":"beef mince (100)","kind":"raw","qty":100.0},{"ingredient":"db sauce","kind":"sub-recipe","qty":1.0},{"ingredient":"pickles","kind":"raw-self","qty":50.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"gluten free buns","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":14.2,"sellSource":"menu"},"cheese burger little ones":{"category":"kids meal","display":"cheese burger little ones","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"tomato sauce","kind":"raw","qty":50.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"juice","kind":"raw","qty":1.0},{"ingredient":"beef mince (100)","kind":"raw","qty":100.0}],"portions":1.0,"sellPrice":15.5,"sellSource":"menu"},"cheese slice":{"category":"add on","display":"cheese slice","inRollup":true,"lines":[{"ingredient":"cheese slice","kind":"raw-self","qty":1.0}],"portions":1.0,"sellPrice":1.0,"sellSource":"menu"},"cheeseburger loaded combo":{"category":"loaded combo","display":"cheeseburger loaded combo","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"beef mince (100)","kind":"raw","qty":100.0},{"ingredient":"db sauce","kind":"sub-recipe","qty":1.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0},{"ingredient":"pickles","kind":"raw-self","qty":50.0},{"ingredient":"onion","kind":"raw","qty":20.0},{"ingredient":"soft drink","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":14.0,"sellSource":"menu"},"cheeseburger potato large":{"category":"loaded potato","display":"cheeseburger potato large","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":400.0},{"ingredient":"beef mince (100)","kind":"raw","qty":200.0},{"ingredient":"db sauce","kind":"sub-recipe","qty":2.0},{"ingredient":"cheese sauce","kind":"raw","qty":80.0},{"ingredient":"onion","kind":"raw","qty":50.0},{"ingredient":"pickles","kind":"raw-self","qty":80.0}],"portions":1.0,"sellPrice":20.0,"sellSource":"menu"},"cheeseburger potato small":{"category":"loaded poato","display":"cheeseburger potato small","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"beef mince (100)","kind":"raw","qty":100.0},{"ingredient":"db sauce","kind":"sub-recipe","qty":1.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0},{"ingredient":"pickles","kind":"raw-self","qty":50.0},{"ingredient":"onion","kind":"raw","qty":20.0}],"portions":1.0,"sellPrice":12.0,"sellSource":"menu"},"chicken bites":{"category":"sides","display":"chicken bites","inRollup":true,"lines":[{"ingredient":"chicken bites","kind":"raw-self","qty":360.0}],"portions":1.0,"sellPrice":13.0,"sellSource":"menu"},"chicken breast":{"category":"add on","display":"chicken breast","inRollup":true,"lines":[{"ingredient":"chicken breast (180)","kind":"raw","qty":180.0}],"portions":1.0,"sellPrice":6.0,"sellSource":"menu"},"chicken burger little ones":{"category":"kids meals","display":"chicken burger little ones","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"chicken tenders (80)","kind":"raw","qty":160.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"juice","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":16.5,"sellSource":"menu"},"chicken potato large":{"category":"loaded potato","display":"chicken potato large","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":400.0},{"ingredient":"chicken bites","kind":"raw-self","qty":240.0},{"ingredient":"aioli","kind":"sub-recipe","qty":2.0},{"ingredient":"bbq sauce","kind":"raw","qty":80.0},{"ingredient":"cheese sauce","kind":"raw","qty":80.0},{"ingredient":"shallots","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":21.0,"sellSource":"menu"},"chicken potato small":{"category":"loaded potato","display":"chicken potato small","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"chicken bites","kind":"raw-self","qty":150.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"bbq sauce","kind":"raw","qty":50.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0},{"ingredient":"shallots","kind":"raw","qty":10.0}],"portions":1.0,"sellPrice":14.0,"sellSource":"menu"},"chicken tenders 10":{"category":"tenders","display":"chicken tenders 10","inRollup":true,"lines":[{"ingredient":"chicken tenders (80)","kind":"raw","qty":800.0},{"ingredient":"smokey bbq","kind":"sub-recipe","qty":1.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0}],"portions":1.0,"sellPrice":30.0,"sellSource":"menu"},"chicken tenders 3":{"category":"tenders","display":"chicken tenders 3","inRollup":true,"lines":[{"ingredient":"chicken tenders (80)","kind":"raw","qty":240.0},{"ingredient":"smokey bbq","kind":"sub-recipe","qty":1.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0}],"portions":1.0,"sellPrice":11.0,"sellSource":"menu"},"chicken tenders 6":{"category":"tenders","display":"chicken tenders 6","inRollup":true,"lines":[{"ingredient":"chicken tenders (80)","kind":"raw","qty":480.0},{"ingredient":"smokey bbq","kind":"sub-recipe","qty":2.0},{"ingredient":"aioli","kind":"sub-recipe","qty":2.0}],"portions":1.0,"sellPrice":21.0,"sellSource":"menu"},"chicken tenders little ones":{"category":"kids meals","display":"chicken tenders little ones","inRollup":true,"lines":[{"ingredient":"chicken tenders (80)","kind":"raw","qty":160.0},{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"juice","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":15.5,"sellSource":"menu"},"chicken wings 10":{"category":"wings","display":"chicken wings 10","inRollup":true,"lines":[{"ingredient":"chicken wings (160)","kind":"raw","qty":1600.0},{"ingredient":"smokey bbq","kind":"sub-recipe","qty":2.0},{"ingredient":"aioli","kind":"sub-recipe","qty":2.0}],"portions":1.0,"sellPrice":25.0,"sellSource":"menu"},"chicken wings 3":{"category":"wings","display":"chicken wings 3","inRollup":true,"lines":[{"ingredient":"chicken wings (160)","kind":"raw","qty":480.0},{"ingredient":"smokey bbq","kind":"sub-recipe","qty":1.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0}],"portions":1.0,"sellPrice":9.0,"sellSource":"menu"},"chicken wings 6":{"category":"wings","display":"chicken wings 6","inRollup":true,"lines":[{"ingredient":"chicken wings (160)","kind":"raw","qty":960.0},{"ingredient":"smokey bbq","kind":"sub-recipe","qty":2.0},{"ingredient":"aioli","kind":"sub-recipe","qty":2.0}],"portions":1.0,"sellPrice":18.0,"sellSource":"menu"},"classic daddy":{"category":"burger","display":"classic daddy","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"beef mince (100)","kind":"raw","qty":100.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"bacon","kind":"raw-self","qty":80.0},{"ingredient":"american mustard","kind":"raw","qty":25.0},{"ingredient":"tomato sauce","kind":"raw","qty":50.0},{"ingredient":"onion","kind":"raw","qty":25.0},{"ingredient":"tomato","kind":"raw","qty":25.0},{"ingredient":"lettuce","kind":"raw","qty":15.0}],"portions":1.0,"sellPrice":18.2,"sellSource":"menu"},"db sauce":{"category":"bulk recipe","display":"Db sauce","inRollup":false,"lines":[{"ingredient":"eggs","kind":"raw","qty":6.0},{"ingredient":"garlic fresh","kind":"raw","qty":80.0},{"ingredient":"canola oil","kind":"raw","qty":5000.0},{"ingredient":"salt","kind":"raw","qty":30.0},{"ingredient":"american mustard","kind":"raw","qty":250.0},{"ingredient":"honey","kind":"raw","qty":60.0},{"ingredient":"paprika","kind":"raw","qty":250.0}],"portions":115.0,"sellPrice":1.5,"sellSource":"sheet"},"double patty":{"category":"add on","display":"double patty","inRollup":true,"lines":[{"ingredient":"beef mince (100)","kind":"raw","qty":100.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0}],"portions":1.0,"sellPrice":5.0,"sellSource":"menu"},"egg":{"category":"add on","display":"egg","inRollup":true,"lines":[{"ingredient":"eggs","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":2.0,"sellSource":"menu"},"fit chick":{"category":"burger","display":"fit chick","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"chicken breast (180)","kind":"raw","qty":180.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"onion","kind":"raw","qty":50.0},{"ingredient":"avocado","kind":"raw","qty":50.0},{"ingredient":"tomato","kind":"raw","qty":20.0},{"ingredient":"lettuce","kind":"raw","qty":25.0}],"portions":1.0,"sellPrice":18.2,"sellSource":"menu"},"fries and drinks":{"category":"combo","display":"fries and drinks","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"soft drink","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":8.0,"sellSource":"menu"},"fries large":{"category":"side","display":"fries large","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":400.0}],"portions":1.0,"sellPrice":8.0,"sellSource":"menu"},"fries small":{"category":"side","display":"fries small","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0}],"portions":1.0,"sellPrice":5.0,"sellSource":"menu"},"halloumi":{"category":"add on","display":"halloumi","inRollup":true,"lines":[{"ingredient":"halloumi","kind":"raw-self","qty":75.0}],"portions":1.0,"sellPrice":5.0,"sellSource":"menu"},"hallulu":{"category":"burger","display":"hallulu","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"halloumi","kind":"raw-self","qty":150.0},{"ingredient":"pickles","kind":"raw-self","qty":50.0},{"ingredient":"tomato","kind":"raw","qty":25.0},{"ingredient":"lettuce","kind":"raw","qty":15.0},{"ingredient":"avocado","kind":"raw","qty":50.0}],"portions":1.0,"sellPrice":18.2,"sellSource":"menu"},"hefty burger":{"category":"burger","display":"hefty burger","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"bbq sauce","kind":"raw","qty":50.0},{"ingredient":"tomato","kind":"raw","qty":1.0},{"ingredient":"lettuce","kind":"raw","qty":1.0},{"ingredient":"onion","kind":"raw","qty":25.0},{"ingredient":"beetroot","kind":"raw","qty":25.0},{"ingredient":"beef mince (100)","kind":"raw","qty":100.0}],"portions":1.0,"sellPrice":14.2,"sellSource":"menu"},"loaded combo chicken":{"category":"loaded combo","display":"loaded combo chicken","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"chicken bites","kind":"raw-self","qty":150.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"bbq sauce","kind":"raw","qty":50.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0},{"ingredient":"shallots","kind":"raw","qty":10.0},{"ingredient":"soft drink","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":14.0,"sellSource":"menu"},"loaded say cheese combo":{"category":"loaded combo","display":"loaded say cheese combo","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"tomato sauce","kind":"raw","qty":50.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0},{"ingredient":"bacon","kind":"raw-self","qty":80.0},{"ingredient":"shallots","kind":"raw","qty":10.0},{"ingredient":"soft drink","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":14.0,"sellSource":"menu"},"loaded spicy combo":{"category":"loaded combo","display":"loaded spicy combo","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"spicy aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"chilli sauce","kind":"raw","qty":50.0},{"ingredient":"bacon","kind":"raw-self","qty":80.0},{"ingredient":"jalapeno","kind":"raw","qty":50.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0},{"ingredient":"soft drink","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":14.0,"sellSource":"menu"},"lot burger":{"category":"burger","display":"lot burger","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"beef mince (100)","kind":"raw","qty":100.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"beetroot","kind":"raw","qty":25.0},{"ingredient":"onion","kind":"raw","qty":25.0},{"ingredient":"lettuce","kind":"raw","qty":15.0},{"ingredient":"tomato","kind":"raw","qty":25.0},{"ingredient":"eggs","kind":"raw","qty":1.0},{"ingredient":"pineapple","kind":"raw-self","qty":80.0},{"ingredient":"bbq sauce","kind":"raw","qty":50.0},{"ingredient":"bacon","kind":"raw-self","qty":80.0}],"portions":1.0,"sellPrice":19.2,"sellSource":"menu"},"pickles":{"category":"add on","display":"pickles","inRollup":true,"lines":[{"ingredient":"pickles","kind":"raw-self","qty":30.0}],"portions":1.0,"sellPrice":1.0,"sellSource":"menu"},"pineapple":{"category":"add on","display":"pineapple","inRollup":true,"lines":[{"ingredient":"pineapple","kind":"raw-self","qty":80.0}],"portions":1.0,"sellPrice":2.0,"sellSource":"menu"},"relish":{"category":"bulk recipe","display":"relish","inRollup":false,"lines":[{"ingredient":"tomato diced","kind":"raw","qty":2550.0},{"ingredient":"sweet chilli","kind":"raw","qty":3000.0}],"portions":110.0,"sellPrice":1.5,"sellSource":"sheet"},"say cheese large":{"category":"loaded potato","display":"say cheese large","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":400.0},{"ingredient":"aioli","kind":"sub-recipe","qty":2.0},{"ingredient":"tomato sauce","kind":"raw","qty":80.0},{"ingredient":"cheese sauce","kind":"raw","qty":80.0},{"ingredient":"bacon","kind":"raw-self","qty":125.0},{"ingredient":"shallots","kind":"raw","qty":20.0}],"portions":1.0,"sellPrice":18.0,"sellSource":"menu"},"say cheese small":{"category":"loaded potato","display":"say cheese small","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"tomato sauce","kind":"raw","qty":50.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0},{"ingredient":"bacon","kind":"raw-self","qty":80.0},{"ingredient":"shallots","kind":"raw","qty":10.0}],"portions":1.0,"sellPrice":12.0,"sellSource":"menu"},"seasoning":{"category":"bulk recipe","display":"seasoning","inRollup":false,"lines":[{"ingredient":"onion powder","kind":"raw","qty":250.0},{"ingredient":"Salt","kind":"raw","qty":1500.0},{"ingredient":"Garlic powder","kind":"raw","qty":250.0},{"ingredient":"paprika","kind":"raw","qty":500.0}],"portions":1.0,"sellPrice":13.9,"sellSource":"sheet"},"smashed avo":{"category":"add on","display":"smashed avo","inRollup":true,"lines":[{"ingredient":"avocado","kind":"raw","qty":50.0}],"portions":1.0,"sellPrice":3.0,"sellSource":"menu"},"smokey bbq":{"category":"bulk recipe","display":"smokey bbq","inRollup":false,"lines":[{"ingredient":"water","kind":"raw","qty":250.0},{"ingredient":"sugar","kind":"raw","qty":500.0},{"ingredient":"vinegar","kind":"raw","qty":500.0},{"ingredient":"paprika","kind":"raw","qty":250.0},{"ingredient":"bbq sauce","kind":"raw","qty":2000.0},{"ingredient":"tomato sauce","kind":"raw","qty":2000.0}],"portions":70.0,"sellPrice":150.0,"sellSource":"sheet"},"spicy aioli":{"category":"bulk recipe","display":"spicy aioli","inRollup":false,"lines":[{"ingredient":"eggs","kind":"raw","qty":6.0},{"ingredient":"garlic fresh","kind":"raw","qty":80.0},{"ingredient":"canola oil","kind":"raw","qty":5000.0},{"ingredient":"salt","kind":"raw","qty":30.0},{"ingredient":"dijon mustard","kind":"raw","qty":60.0},{"ingredient":"chilli sauce","kind":"raw","qty":1460.0}],"portions":138.0,"sellPrice":1.5,"sellSource":"sheet"},"spicy chick":{"category":"burger","display":"spicy chick","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"chicken breast (180)","kind":"raw","qty":180.0},{"ingredient":"spicy aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"jalapeno","kind":"raw","qty":50.0},{"ingredient":"slaw","kind":"raw","qty":80.0}],"portions":1.0,"sellPrice":18.2,"sellSource":"menu"},"spicy potatoes large":{"category":"loaded poatoes","display":"spicy potatoes large","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":400.0},{"ingredient":"spicy aioli","kind":"sub-recipe","qty":2.0},{"ingredient":"chilli sauce","kind":"raw","qty":80.0},{"ingredient":"cheese sauce","kind":"raw","qty":80.0},{"ingredient":"jalapeno","kind":"raw","qty":80.0},{"ingredient":"bacon","kind":"raw-self","qty":125.0}],"portions":1.0,"sellPrice":18.0,"sellSource":"menu"},"spicy potatoes small":{"category":"loaded potato","display":"spicy potatoes small","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"spicy aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"chilli sauce","kind":"raw","qty":50.0},{"ingredient":"bacon","kind":"raw-self","qty":80.0},{"ingredient":"jalapeno","kind":"raw","qty":50.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0}],"portions":1.0,"sellPrice":12.0,"sellSource":"menu"},"thick chick":{"category":"burger","display":"thick chick","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"chicken breast (180)","kind":"raw","qty":180.0},{"ingredient":"chicken breast (180)","kind":"raw","qty":180.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"spicy aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"relish","kind":"sub-recipe","qty":1.0},{"ingredient":"lettuce","kind":"raw","qty":15.0}],"portions":1.0,"sellPrice":23.2,"sellSource":"menu"},"triple patty":{"category":"add on","display":"triple patty","inRollup":true,"lines":[{"ingredient":"beef mince (100)","kind":"raw","qty":200.0},{"ingredient":"cheese slice","kind":"raw-self","qty":2.0}],"portions":1.0,"sellPrice":9.0,"sellSource":"menu"},"vego loaded combo":{"category":"loaded combo","display":"vego loaded combo","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"tomato","kind":"raw","qty":50.0},{"ingredient":"onion","kind":"raw","qty":50.0},{"ingredient":"shallots","kind":"raw","qty":20.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"tomato sauce","kind":"raw","qty":50.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0},{"ingredient":"soft drink","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":14.0,"sellSource":"menu"},"vego potato large":{"category":"loaded potato","display":"vego potato large","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":400.0},{"ingredient":"tomato","kind":"raw","qty":100.0},{"ingredient":"onion","kind":"raw","qty":80.0},{"ingredient":"shallots","kind":"raw","qty":30.0},{"ingredient":"aioli","kind":"sub-recipe","qty":2.0},{"ingredient":"tomato sauce","kind":"raw","qty":80.0},{"ingredient":"cheese sauce","kind":"raw","qty":80.0}],"portions":1.0,"sellPrice":16.0,"sellSource":"menu"},"vego potato small":{"category":"loaded potato","display":"vego potato small","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"tomato","kind":"raw","qty":50.0},{"ingredient":"onion","kind":"raw","qty":50.0},{"ingredient":"shallots","kind":"raw","qty":20.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"tomato sauce","kind":"raw","qty":50.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0}],"portions":1.0,"sellPrice":10.0,"sellSource":"menu"}}};
+var RECIPE_DATA_DEFAULT = {"raw":{"american mustard":{"display":"american mustard","measure":"bottle","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":9.43,"qty":920.0,"source":"sheet","unit":"Per mL"},"avocado":{"display":"avocado","measure":"box","note":"Windsor Farm Shop, current $41/tray (was $45 in sheet). Kane weighed one avocado at ~200g and estimated the tray at ~5kg (no count is printed on the invoice itself, checked 2026-09-09) - kept the sheet's existing 5000g-per-tray convention on that basis. Flagged as an estimate, not an invoiced weight.","price":41.0,"qty":5000.0,"source":"live","unit":"per gram"},"bacon":{"display":"bacon","measure":"box","note":"MAX(City Fine Food $11.80/kg, South Windsor Butchery $11.90/kg) per Kane \u2014 using SWB $11.90/kg x5000g","price":59.5,"qty":5000.0,"source":"live","unit":"Per Gram"},"bbq sauce":{"display":"bbq sauce","measure":"bottle","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":14.0,"qty":4000.0,"source":"sheet","unit":"Per mL"},"beef mince (100)":{"display":"beef mince (100)","measure":"bag","note":"South Windsor Butchery \u2014 80% Mince $12.90/kg, unchanged (100g balls, 80% fat, confirmed by Kane)","price":12.9,"qty":1000.0,"source":"live","unit":"Per Gram"},"beetroot":{"display":"beetroot","measure":"Can","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":11.5,"qty":3000.0,"source":"sheet","unit":"Per Gram"},"canola oil":{"display":"canola oil","measure":"box","note":"Oil2U \u2014 Canola Oil SPR3 Bulk (fresh) $2.40/L, unchanged","price":2.4,"qty":1000.0,"source":"live","unit":"per ml"},"cheese sauce":{"display":"cheese sauce","measure":"bottle","note":"City Fine Food \u2014 Cheese Sauce 1kg (Tatua), current (was $10.20)","price":10.5,"qty":1000.0,"source":"live","unit":"Per mL"},"cheese slice":{"display":"cheese slice","measure":"Pack","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":28.0,"qty":160.0,"source":"sheet","unit":"Per Slice"},"chicken bites":{"display":"chicken bites","measure":"bag","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":12.3,"qty":1000.0,"source":"sheet","unit":"per bite"},"chicken breast (180)":{"display":"chicken breast (180)","measure":"bag","note":"South Windsor Butchery \u2014 Sliced Chicken Fillet $14.30/kg, unchanged (confirmed by Kane)","price":14.3,"qty":1000.0,"source":"live","unit":"per breast"},"chicken tenders (80)":{"display":"chicken tenders (80)","measure":"bag","note":"South Windsor Butchery \u2014 Chicken Tenderloin $12.30/kg, unchanged","price":12.3,"qty":1000.0,"source":"live","unit":"per tender"},"chicken wings (160)":{"display":"chicken wings (160)","measure":"bag","note":"South Windsor Butchery \u2014 Chicken Wing $4.55/kg, unchanged","price":4.55,"qty":1000.0,"source":"live","unit":"per wing "},"chilli sauce":{"display":"chilli sauce","measure":"Bottle","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":7.4,"qty":730.0,"source":"sheet","unit":"Per mL"},"dijon mustard":{"display":"dijon mustard","measure":"bottle","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":20.5,"qty":2500.0,"source":"sheet","unit":"Per Gram"},"eggs":{"display":"eggs","measure":"box","note":"City Fine Food 600g/$65 ctn is the preferred size per Kane; they substitute the 700g/$85 ctn only when 600g is out of stock (not modelled separately - flagged as a variance source).","price":65.0,"qty":180.0,"source":"live","unit":"per egg"},"french fries":{"display":"french fries","measure":"box","note":"City Fine Food \u2014 Chips 7mm Shoestring 4x3kg (Edgell), current (was $43.00 in sheet)","price":41.66,"qty":12000.0,"source":"live","unit":"per gram"},"garlic fresh":{"display":"garlic fresh","measure":"pack ","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":10.0,"qty":1000.0,"source":"sheet","unit":"per gram "},"garlic powder":{"display":"garlic powder","measure":"bag","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":15.95,"qty":1000.0,"source":"sheet","unit":"per gram"},"gluten free buns":{"display":"gluten free buns","measure":"box","note":"Urbun Bakery \u2014 GF/Vegan Milk Bun $2.18 each x30","price":65.4,"qty":30.0,"source":"live","unit":"per bun"},"halloumi":{"display":"halloumi","measure":"Bag","note":"City Fine Food \u2014 Halloumi Cheese 750g, unchanged","price":15.8,"qty":750.0,"source":"live","unit":"Per Gram"},"honey":{"display":"honey","measure":"bottle ","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":18.5,"qty":3000.0,"source":"sheet","unit":"per gram "},"jalapeno":{"display":"jalapeno","measure":"tin","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":9.58,"qty":3000.0,"source":"sheet","unit":"Per Gram"},"juice":{"display":"juice","measure":"box","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":34.0,"qty":24.0,"source":"sheet","unit":"per bottle"},"lettuce":{"display":"lettuce","measure":"box","note":"Windsor Farm Shop \u2014 Lettuce Box(8) $15/box, unchanged (per-leaf conversion preserved from sheet)","price":15.0,"qty":2400.0,"source":"live","unit":" per leaf"},"onion":{"display":"onion","measure":"bag","note":"Windsor Farm Shop \u2014 Onions $15/box, unchanged","price":15.0,"qty":20000.0,"source":"live","unit":"per gram"},"onion powder":{"display":"onion powder","measure":"bag","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":10.0,"qty":1000.0,"source":"sheet","unit":"per gram"},"paprika":{"display":"paprika","measure":"bag","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":14.8,"qty":500.0,"source":"sheet","unit":"per gram"},"pickles":{"display":"pickles","measure":"box","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":45.0,"qty":15000.0,"source":"sheet","unit":"per gram"},"pineapple":{"display":"pineapple","measure":"tin","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":15.5,"qty":3000.0,"source":"sheet","unit":"Per Gram"},"potato bun":{"display":"Potato Bun","measure":"Box","note":"Urbun Bakery \u2014 Sliced Potato Bun $0.95 each x30","price":28.5,"qty":30.0,"source":"live","unit":"Per Bun"},"salt":{"display":"salt","measure":"bag","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":9.9,"qty":10000.0,"source":"sheet","unit":"Per Gram"},"shallots":{"display":"shallots","measure":"bag","note":"Windsor Farm Shop \u2014 Shallots $2/each, unchanged (per-gram conversion preserved from sheet)","price":2.0,"qty":80.0,"source":"live","unit":"Per Gram"},"slaw":{"display":"slaw","measure":"box","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":8.0,"qty":2000.0,"source":"sheet","unit":"per gram"},"soft drink":{"display":"soft drink","measure":"box","note":"City Fine Food \u2014 Coca-Cola Cans 24x375ml, current (was $30.00 in sheet)","price":29.36,"qty":24.0,"source":"live","unit":"each can"},"sugar":{"display":"sugar","measure":"pack","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":4.0,"qty":2000.0,"source":"sheet","unit":"per gram"},"sweet chilli":{"display":"sweet chilli","measure":"bottle","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":30.0,"qty":3000.0,"source":"sheet","unit":"per ml"},"tomato":{"display":"tomato","measure":"box","note":"Windsor Farm Shop \u2014 Tomatoes $70/box, unchanged","price":70.0,"qty":15000.0,"source":"live","unit":"per slice"},"tomato diced":{"display":"tomato diced","measure":"tin","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":8.7,"qty":2550.0,"source":"sheet","unit":"per ml"},"tomato sauce":{"display":"tomato sauce","measure":"bottle ","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":16.2,"qty":4000.0,"source":"sheet","unit":"per ml"},"unsalted butter":{"display":"unsalted butter","measure":"pack ","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":6.0,"qty":500.0,"source":"sheet","unit":"per gram "},"vinegar":{"display":"vinegar","measure":"box","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":17.2,"qty":20000.0,"source":"sheet","unit":"per ml"},"water":{"display":"water","measure":"bottle","note":"Not in supplier price tracker or farm shop doc - using the last price entered in the original spreadsheet.","price":null,"qty":1000.0,"source":"sheet","unit":"per ml"}},"recipes":{"aioli":{"category":"Bulk Recipe","display":"aioli","inRollup":false,"lines":[{"ingredient":"eggs","kind":"raw","qty":6.0},{"ingredient":"garlic fresh","kind":"raw","qty":80.0},{"ingredient":"canola oil","kind":"raw","qty":4000.0},{"ingredient":"salt","kind":"raw","qty":30.0},{"ingredient":"dijon mustard","kind":"raw","qty":60.0},{"ingredient":"water","kind":"raw","qty":900.0}],"portions":105.0,"sellPrice":1.5,"sellSource":"sheet"},"bacon":{"category":"add on","display":"bacon","inRollup":true,"lines":[{"ingredient":"bacon","kind":"raw-self","qty":80.0}],"portions":1.0,"sellPrice":3.0,"sellSource":"menu"},"bacon & egg burger":{"category":"burger","display":"bacon & egg burger","inRollup":true,"lines":[{"ingredient":"eggs","kind":"raw","qty":2.0},{"ingredient":"bacon","kind":"raw-self","qty":120.0},{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"bbq sauce","kind":"raw","qty":30.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0}],"portions":1.0,"sellPrice":12.0,"sellSource":"sheet"},"buffalo sauce":{"category":"bulk recipe","display":"buffalo sauce","inRollup":false,"lines":[{"ingredient":"chilli sauce","kind":"raw","qty":2190.0},{"ingredient":"vinegar","kind":"raw","qty":1100.0},{"ingredient":"unsalted butter","kind":"raw","qty":1000.0}],"portions":88.0,"sellPrice":1.5,"sellSource":"sheet"},"cheeky chick":{"category":"burger","display":"cheeky chick","inRollup":true,"lines":[{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"chicken breast (180)","kind":"raw","qty":180.0},{"ingredient":"slaw","kind":"raw","qty":80.0},{"ingredient":"avocado","kind":"raw","qty":30.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"bbq sauce","kind":"raw","qty":50.0},{"ingredient":"gluten free buns","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":18.2,"sellSource":"menu"},"cheese burger":{"category":"burger","display":"cheese burger","inRollup":true,"lines":[{"ingredient":"onion","kind":"raw","qty":25.0},{"ingredient":"beef mince (100)","kind":"raw","qty":100.0},{"ingredient":"db sauce","kind":"sub-recipe","qty":1.0},{"ingredient":"pickles","kind":"raw-self","qty":50.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"gluten free buns","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":14.2,"sellSource":"menu"},"cheese burger little ones":{"category":"kids meal","display":"cheese burger little ones","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"tomato sauce","kind":"raw","qty":50.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"juice","kind":"raw","qty":1.0},{"ingredient":"beef mince (100)","kind":"raw","qty":100.0}],"portions":1.0,"sellPrice":15.5,"sellSource":"menu"},"cheese slice":{"category":"add on","display":"cheese slice","inRollup":true,"lines":[{"ingredient":"cheese slice","kind":"raw-self","qty":1.0}],"portions":1.0,"sellPrice":1.0,"sellSource":"menu"},"cheeseburger loaded combo":{"category":"loaded combo","display":"cheeseburger loaded combo","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"beef mince (100)","kind":"raw","qty":100.0},{"ingredient":"db sauce","kind":"sub-recipe","qty":1.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0},{"ingredient":"pickles","kind":"raw-self","qty":50.0},{"ingredient":"onion","kind":"raw","qty":20.0},{"ingredient":"soft drink","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":14.0,"sellSource":"menu"},"cheeseburger potato large":{"category":"loaded potato","display":"cheeseburger potato large","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":400.0},{"ingredient":"beef mince (100)","kind":"raw","qty":200.0},{"ingredient":"db sauce","kind":"sub-recipe","qty":2.0},{"ingredient":"cheese sauce","kind":"raw","qty":80.0},{"ingredient":"onion","kind":"raw","qty":50.0},{"ingredient":"pickles","kind":"raw-self","qty":80.0}],"portions":1.0,"sellPrice":20.0,"sellSource":"menu"},"cheeseburger potato small":{"category":"loaded poato","display":"cheeseburger potato small","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"beef mince (100)","kind":"raw","qty":100.0},{"ingredient":"db sauce","kind":"sub-recipe","qty":1.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0},{"ingredient":"pickles","kind":"raw-self","qty":50.0},{"ingredient":"onion","kind":"raw","qty":20.0}],"portions":1.0,"sellPrice":12.0,"sellSource":"menu"},"chicken bites":{"category":"sides","display":"chicken bites","inRollup":true,"lines":[{"ingredient":"chicken bites","kind":"raw-self","qty":360.0}],"portions":1.0,"sellPrice":13.0,"sellSource":"menu"},"chicken breast":{"category":"add on","display":"chicken breast","inRollup":true,"lines":[{"ingredient":"chicken breast (180)","kind":"raw","qty":180.0}],"portions":1.0,"sellPrice":6.0,"sellSource":"menu"},"chicken burger little ones":{"category":"kids meals","display":"chicken burger little ones","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"chicken tenders (80)","kind":"raw","qty":160.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"juice","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":16.5,"sellSource":"menu"},"chicken potato large":{"category":"loaded potato","display":"chicken potato large","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":400.0},{"ingredient":"chicken bites","kind":"raw-self","qty":240.0},{"ingredient":"aioli","kind":"sub-recipe","qty":2.0},{"ingredient":"bbq sauce","kind":"raw","qty":80.0},{"ingredient":"cheese sauce","kind":"raw","qty":80.0},{"ingredient":"shallots","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":21.0,"sellSource":"menu"},"chicken potato small":{"category":"loaded potato","display":"chicken potato small","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"chicken bites","kind":"raw-self","qty":150.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"bbq sauce","kind":"raw","qty":50.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0},{"ingredient":"shallots","kind":"raw","qty":10.0}],"portions":1.0,"sellPrice":14.0,"sellSource":"menu"},"chicken tenders 10":{"category":"tenders","display":"chicken tenders 10","inRollup":true,"lines":[{"ingredient":"chicken tenders (80)","kind":"raw","qty":800.0},{"ingredient":"smokey bbq","kind":"sub-recipe","qty":1.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0}],"portions":1.0,"sellPrice":30.0,"sellSource":"menu"},"chicken tenders 3":{"category":"tenders","display":"chicken tenders 3","inRollup":true,"lines":[{"ingredient":"chicken tenders (80)","kind":"raw","qty":240.0},{"ingredient":"smokey bbq","kind":"sub-recipe","qty":1.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0}],"portions":1.0,"sellPrice":11.0,"sellSource":"menu"},"chicken tenders 6":{"category":"tenders","display":"chicken tenders 6","inRollup":true,"lines":[{"ingredient":"chicken tenders (80)","kind":"raw","qty":480.0},{"ingredient":"smokey bbq","kind":"sub-recipe","qty":2.0},{"ingredient":"aioli","kind":"sub-recipe","qty":2.0}],"portions":1.0,"sellPrice":21.0,"sellSource":"menu"},"chicken tenders little ones":{"category":"kids meals","display":"chicken tenders little ones","inRollup":true,"lines":[{"ingredient":"chicken tenders (80)","kind":"raw","qty":160.0},{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"juice","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":15.5,"sellSource":"menu"},"chicken wings 10":{"category":"wings","display":"chicken wings 10","inRollup":true,"lines":[{"ingredient":"chicken wings (160)","kind":"raw","qty":1600.0},{"ingredient":"smokey bbq","kind":"sub-recipe","qty":2.0},{"ingredient":"aioli","kind":"sub-recipe","qty":2.0}],"portions":1.0,"sellPrice":25.0,"sellSource":"menu"},"chicken wings 3":{"category":"wings","display":"chicken wings 3","inRollup":true,"lines":[{"ingredient":"chicken wings (160)","kind":"raw","qty":480.0},{"ingredient":"smokey bbq","kind":"sub-recipe","qty":1.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0}],"portions":1.0,"sellPrice":9.0,"sellSource":"menu"},"chicken wings 6":{"category":"wings","display":"chicken wings 6","inRollup":true,"lines":[{"ingredient":"chicken wings (160)","kind":"raw","qty":960.0},{"ingredient":"smokey bbq","kind":"sub-recipe","qty":2.0},{"ingredient":"aioli","kind":"sub-recipe","qty":2.0}],"portions":1.0,"sellPrice":18.0,"sellSource":"menu"},"classic daddy":{"category":"burger","display":"classic daddy","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"beef mince (100)","kind":"raw","qty":100.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"bacon","kind":"raw-self","qty":80.0},{"ingredient":"american mustard","kind":"raw","qty":25.0},{"ingredient":"tomato sauce","kind":"raw","qty":50.0},{"ingredient":"onion","kind":"raw","qty":25.0},{"ingredient":"tomato","kind":"raw","qty":25.0},{"ingredient":"lettuce","kind":"raw","qty":15.0}],"portions":1.0,"sellPrice":18.2,"sellSource":"menu"},"db sauce":{"category":"bulk recipe","display":"Db sauce","inRollup":false,"lines":[{"ingredient":"eggs","kind":"raw","qty":6.0},{"ingredient":"garlic fresh","kind":"raw","qty":80.0},{"ingredient":"canola oil","kind":"raw","qty":5000.0},{"ingredient":"salt","kind":"raw","qty":30.0},{"ingredient":"american mustard","kind":"raw","qty":250.0},{"ingredient":"honey","kind":"raw","qty":60.0},{"ingredient":"paprika","kind":"raw","qty":250.0}],"portions":115.0,"sellPrice":1.5,"sellSource":"sheet"},"double patty":{"category":"add on","display":"double patty","inRollup":true,"lines":[{"ingredient":"beef mince (100)","kind":"raw","qty":100.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0}],"portions":1.0,"sellPrice":5.0,"sellSource":"menu"},"egg":{"category":"add on","display":"egg","inRollup":true,"lines":[{"ingredient":"eggs","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":2.0,"sellSource":"menu"},"fit chick":{"category":"burger","display":"fit chick","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"chicken breast (180)","kind":"raw","qty":180.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"onion","kind":"raw","qty":50.0},{"ingredient":"avocado","kind":"raw","qty":50.0},{"ingredient":"tomato","kind":"raw","qty":20.0},{"ingredient":"lettuce","kind":"raw","qty":25.0}],"portions":1.0,"sellPrice":18.2,"sellSource":"menu"},"fries and drinks":{"category":"combo","display":"fries and drinks","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"soft drink","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":8.0,"sellSource":"menu"},"fries large":{"category":"side","display":"fries large","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":400.0}],"portions":1.0,"sellPrice":8.0,"sellSource":"menu"},"fries small":{"category":"side","display":"fries small","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0}],"portions":1.0,"sellPrice":5.0,"sellSource":"menu"},"halloumi":{"category":"add on","display":"halloumi","inRollup":true,"lines":[{"ingredient":"halloumi","kind":"raw-self","qty":75.0}],"portions":1.0,"sellPrice":5.0,"sellSource":"menu"},"hallulu":{"category":"burger","display":"hallulu","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"halloumi","kind":"raw-self","qty":150.0},{"ingredient":"pickles","kind":"raw-self","qty":50.0},{"ingredient":"tomato","kind":"raw","qty":25.0},{"ingredient":"lettuce","kind":"raw","qty":15.0},{"ingredient":"avocado","kind":"raw","qty":50.0}],"portions":1.0,"sellPrice":18.2,"sellSource":"menu"},"hefty burger":{"category":"burger","display":"hefty burger","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"bbq sauce","kind":"raw","qty":50.0},{"ingredient":"tomato","kind":"raw","qty":1.0},{"ingredient":"lettuce","kind":"raw","qty":1.0},{"ingredient":"onion","kind":"raw","qty":25.0},{"ingredient":"beetroot","kind":"raw","qty":25.0},{"ingredient":"beef mince (100)","kind":"raw","qty":100.0}],"portions":1.0,"sellPrice":14.2,"sellSource":"menu"},"loaded combo chicken":{"category":"loaded combo","display":"loaded combo chicken","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"chicken bites","kind":"raw-self","qty":150.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"bbq sauce","kind":"raw","qty":50.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0},{"ingredient":"shallots","kind":"raw","qty":10.0},{"ingredient":"soft drink","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":14.0,"sellSource":"menu"},"loaded say cheese combo":{"category":"loaded combo","display":"loaded say cheese combo","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"tomato sauce","kind":"raw","qty":50.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0},{"ingredient":"bacon","kind":"raw-self","qty":80.0},{"ingredient":"shallots","kind":"raw","qty":10.0},{"ingredient":"soft drink","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":14.0,"sellSource":"menu"},"loaded spicy combo":{"category":"loaded combo","display":"loaded spicy combo","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"spicy aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"chilli sauce","kind":"raw","qty":50.0},{"ingredient":"bacon","kind":"raw-self","qty":80.0},{"ingredient":"jalapeno","kind":"raw","qty":50.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0},{"ingredient":"soft drink","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":14.0,"sellSource":"menu"},"lot burger":{"category":"burger","display":"lot burger","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"beef mince (100)","kind":"raw","qty":100.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"beetroot","kind":"raw","qty":25.0},{"ingredient":"onion","kind":"raw","qty":25.0},{"ingredient":"lettuce","kind":"raw","qty":15.0},{"ingredient":"tomato","kind":"raw","qty":25.0},{"ingredient":"eggs","kind":"raw","qty":1.0},{"ingredient":"pineapple","kind":"raw-self","qty":80.0},{"ingredient":"bbq sauce","kind":"raw","qty":50.0},{"ingredient":"bacon","kind":"raw-self","qty":80.0}],"portions":1.0,"sellPrice":19.2,"sellSource":"menu"},"pickles":{"category":"add on","display":"pickles","inRollup":true,"lines":[{"ingredient":"pickles","kind":"raw-self","qty":30.0}],"portions":1.0,"sellPrice":1.0,"sellSource":"menu"},"pineapple":{"category":"add on","display":"pineapple","inRollup":true,"lines":[{"ingredient":"pineapple","kind":"raw-self","qty":80.0}],"portions":1.0,"sellPrice":2.0,"sellSource":"menu"},"relish":{"category":"bulk recipe","display":"relish","inRollup":false,"lines":[{"ingredient":"tomato diced","kind":"raw","qty":2550.0},{"ingredient":"sweet chilli","kind":"raw","qty":3000.0}],"portions":110.0,"sellPrice":1.5,"sellSource":"sheet"},"say cheese large":{"category":"loaded potato","display":"say cheese large","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":400.0},{"ingredient":"aioli","kind":"sub-recipe","qty":2.0},{"ingredient":"tomato sauce","kind":"raw","qty":80.0},{"ingredient":"cheese sauce","kind":"raw","qty":80.0},{"ingredient":"bacon","kind":"raw-self","qty":125.0},{"ingredient":"shallots","kind":"raw","qty":20.0}],"portions":1.0,"sellPrice":18.0,"sellSource":"menu"},"say cheese small":{"category":"loaded potato","display":"say cheese small","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"tomato sauce","kind":"raw","qty":50.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0},{"ingredient":"bacon","kind":"raw-self","qty":80.0},{"ingredient":"shallots","kind":"raw","qty":10.0}],"portions":1.0,"sellPrice":12.0,"sellSource":"menu"},"seasoning":{"category":"bulk recipe","display":"seasoning","inRollup":false,"lines":[{"ingredient":"onion powder","kind":"raw","qty":250.0},{"ingredient":"Salt","kind":"raw","qty":1500.0},{"ingredient":"Garlic powder","kind":"raw","qty":250.0},{"ingredient":"paprika","kind":"raw","qty":500.0}],"portions":1.0,"sellPrice":13.9,"sellSource":"sheet"},"smashed avo":{"category":"add on","display":"smashed avo","inRollup":true,"lines":[{"ingredient":"avocado","kind":"raw","qty":50.0}],"portions":1.0,"sellPrice":3.0,"sellSource":"menu"},"smokey bbq":{"category":"bulk recipe","display":"smokey bbq","inRollup":false,"lines":[{"ingredient":"water","kind":"raw","qty":250.0},{"ingredient":"sugar","kind":"raw","qty":500.0},{"ingredient":"vinegar","kind":"raw","qty":500.0},{"ingredient":"paprika","kind":"raw","qty":250.0},{"ingredient":"bbq sauce","kind":"raw","qty":2000.0},{"ingredient":"tomato sauce","kind":"raw","qty":2000.0}],"portions":70.0,"sellPrice":150.0,"sellSource":"sheet"},"spicy aioli":{"category":"bulk recipe","display":"spicy aioli","inRollup":false,"lines":[{"ingredient":"eggs","kind":"raw","qty":6.0},{"ingredient":"garlic fresh","kind":"raw","qty":80.0},{"ingredient":"canola oil","kind":"raw","qty":5000.0},{"ingredient":"salt","kind":"raw","qty":30.0},{"ingredient":"dijon mustard","kind":"raw","qty":60.0},{"ingredient":"chilli sauce","kind":"raw","qty":1460.0}],"portions":138.0,"sellPrice":1.5,"sellSource":"sheet"},"spicy chick":{"category":"burger","display":"spicy chick","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"chicken breast (180)","kind":"raw","qty":180.0},{"ingredient":"spicy aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"jalapeno","kind":"raw","qty":50.0},{"ingredient":"slaw","kind":"raw","qty":80.0}],"portions":1.0,"sellPrice":18.2,"sellSource":"menu"},"spicy potatoes large":{"category":"loaded poatoes","display":"spicy potatoes large","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":400.0},{"ingredient":"spicy aioli","kind":"sub-recipe","qty":2.0},{"ingredient":"chilli sauce","kind":"raw","qty":80.0},{"ingredient":"cheese sauce","kind":"raw","qty":80.0},{"ingredient":"jalapeno","kind":"raw","qty":80.0},{"ingredient":"bacon","kind":"raw-self","qty":125.0}],"portions":1.0,"sellPrice":18.0,"sellSource":"menu"},"spicy potatoes small":{"category":"loaded potato","display":"spicy potatoes small","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"spicy aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"chilli sauce","kind":"raw","qty":50.0},{"ingredient":"bacon","kind":"raw-self","qty":80.0},{"ingredient":"jalapeno","kind":"raw","qty":50.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0}],"portions":1.0,"sellPrice":12.0,"sellSource":"menu"},"thick chick":{"category":"burger","display":"thick chick","inRollup":true,"lines":[{"ingredient":"potato bun","kind":"raw","qty":1.0},{"ingredient":"chicken breast (180)","kind":"raw","qty":180.0},{"ingredient":"chicken breast (180)","kind":"raw","qty":180.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"cheese slice","kind":"raw-self","qty":1.0},{"ingredient":"spicy aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"relish","kind":"sub-recipe","qty":1.0},{"ingredient":"lettuce","kind":"raw","qty":15.0}],"portions":1.0,"sellPrice":23.2,"sellSource":"menu"},"triple patty":{"category":"add on","display":"triple patty","inRollup":true,"lines":[{"ingredient":"beef mince (100)","kind":"raw","qty":200.0},{"ingredient":"cheese slice","kind":"raw-self","qty":2.0}],"portions":1.0,"sellPrice":9.0,"sellSource":"menu"},"vego loaded combo":{"category":"loaded combo","display":"vego loaded combo","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"tomato","kind":"raw","qty":50.0},{"ingredient":"onion","kind":"raw","qty":50.0},{"ingredient":"shallots","kind":"raw","qty":20.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"tomato sauce","kind":"raw","qty":50.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0},{"ingredient":"soft drink","kind":"raw","qty":1.0}],"portions":1.0,"sellPrice":14.0,"sellSource":"menu"},"vego potato large":{"category":"loaded potato","display":"vego potato large","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":400.0},{"ingredient":"tomato","kind":"raw","qty":100.0},{"ingredient":"onion","kind":"raw","qty":80.0},{"ingredient":"shallots","kind":"raw","qty":30.0},{"ingredient":"aioli","kind":"sub-recipe","qty":2.0},{"ingredient":"tomato sauce","kind":"raw","qty":80.0},{"ingredient":"cheese sauce","kind":"raw","qty":80.0}],"portions":1.0,"sellPrice":16.0,"sellSource":"menu"},"vego potato small":{"category":"loaded potato","display":"vego potato small","inRollup":true,"lines":[{"ingredient":"french fries","kind":"raw","qty":200.0},{"ingredient":"tomato","kind":"raw","qty":50.0},{"ingredient":"onion","kind":"raw","qty":50.0},{"ingredient":"shallots","kind":"raw","qty":20.0},{"ingredient":"aioli","kind":"sub-recipe","qty":1.0},{"ingredient":"tomato sauce","kind":"raw","qty":50.0},{"ingredient":"cheese sauce","kind":"raw","qty":50.0}],"portions":1.0,"sellPrice":10.0,"sellSource":"menu"}}};
 
 /* ============================================================
    Recipe costing / theoretical COGS
@@ -1028,13 +1043,230 @@ var RECIPE_DATA = {"raw":{"american mustard":{"display":"american mustard","meas
    and merged over the baked-in defaults above, so a price refresh needs no
    redeploy of this file. If the fetch hasn't completed yet, or a given
    ingredient has no override on file, its baked-in default price is used -
-   the tab never blocks or blanks out waiting on this. */
+   the tab never blocks or blanks out waiting on this.
+
+   RECIPE_DATA itself is now EDITABLE from the dashboard (resize a portion,
+   drop an ingredient, add a whole new item) - RECIPE_DATA_DEFAULT above stays
+   frozen as the baked-in fallback, while RECIPE_DATA is a live working copy
+   that a save from the editor UI replaces wholesale and POSTs to
+   /api/recipes. Until the first save, RECIPE_DATA just IS the default. */
+
+function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
+var RECIPE_DATA = deepClone(RECIPE_DATA_DEFAULT);
+var recipeDataState = { source: 'default', updatedAt: null, loaded: false };
+
+function fetchRecipes() {
+  fetch('/api/recipes').then(function (res) {
+    return res.ok ? res.json() : null;
+  }).then(function (payload) {
+    if (payload && payload.data && payload.data.raw && payload.data.recipes) {
+      RECIPE_DATA = payload.data;
+      recipeDataState.source = 'server';
+      recipeDataState.updatedAt = payload.updatedAt;
+    }
+    recipeDataState.loaded = true;
+    if (state.view === 'costing') render();
+  }).catch(function () { recipeDataState.loaded = true; });
+}
+
+/* Works out 'kind' for one ingredient line the same way the engine needs it:
+   A name that exists as BOTH a raw ingredient AND a recipe (bacon, cheese
+   slice, pineapple, pickles, halloumi, chicken bites - each sold as its own
+   standalone add-on, wrapping a raw ingredient of the same name) ALWAYS
+   resolves to the raw row, wherever it's referenced - including from within
+   its own same-named recipe. This must hold everywhere that name is used as
+   an ingredient line, not only inside its own recipe: that same-named
+   recipe's own line already bakes in its standard portion size (e.g. bacon's
+   recipe means "80g, the standard side serve"), so resolving some OTHER
+   recipe's "bacon" line through the recipe instead of straight to the raw
+   ingredient would multiply that 80g back in on top of whatever quantity the
+   other recipe specifies - confirmed by cross-checking against the original
+   spreadsheet's own totals; this is exactly what mismatched before that fix,
+   and re-deriving 'kind' from only a same-key check (rather than this
+   collision check) would silently reintroduce it on the next save. A plain
+   recipe-as-ingredient with no raw-ingredient collision resolves as
+   'sub-recipe' (chained live); a plain ingredient with no recipe of the same
+   name resolves as 'raw'. Returns null when the name matches neither - the
+   editor UI blocks saving until every line resolves. `recipeKey` is unused
+   now (kept so callers don't need to change) - the raw/recipe name collision
+   itself is what decides self-reference, not which recipe is asking. */
+function inferLineKind(recipeKey, ingredientName) {
+  var iname = String(ingredientName).trim().toLowerCase();
+  var hasRaw = !!RECIPE_DATA.raw[iname];
+  var hasRecipe = !!RECIPE_DATA.recipes[iname];
+  if (hasRaw && hasRecipe) return 'raw-self';
+  if (hasRecipe) return 'sub-recipe';
+  if (hasRaw) return 'raw';
+  return null;
+}
+
+/* Recomputes every line's kind (call after ANY edit, since renaming a recipe
+   or adding/removing an ingredient can change what other lines resolve to)
+   and returns a list of problems - display strings, or [] if the whole
+   document is internally consistent and safe to save. */
+function validateRecipeData() {
+  var problems = [];
+  Object.keys(RECIPE_DATA.recipes).forEach(function (key) {
+    var rec = RECIPE_DATA.recipes[key];
+    if (!rec.lines.length) problems.push('"' + rec.display + '" has no ingredients.');
+    rec.lines.forEach(function (line) {
+      var kind = inferLineKind(key, line.ingredient);
+      if (!kind) {
+        problems.push('"' + rec.display + '": ingredient "' + line.ingredient + '" doesn’t match any raw ingredient or recipe.');
+      } else {
+        line.kind = kind;
+      }
+      if (!(line.qty > 0)) problems.push('"' + rec.display + '": "' + line.ingredient + '" needs a quantity greater than 0.');
+    });
+  });
+  return problems;
+}
+
+function saveRecipeData(onDone) {
+  var problems = validateRecipeData();
+  if (problems.length) { onDone(problems); return; }
+  fetch('/api/recipes', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ raw: RECIPE_DATA.raw, recipes: RECIPE_DATA.recipes }),
+  }).then(function (res) { return res.json().then(function (j) { return { ok: res.ok, body: j }; }); })
+    .then(function (r) {
+      if (!r.ok) { onDone([r.body && r.body.plain ? r.body.plain : 'Save failed.']); return; }
+      recipeDataState.source = 'server';
+      recipeDataState.updatedAt = r.body.updatedAt;
+      onDone([]);
+    })
+    .catch(function () { onDone(['Save failed - check your connection and try again.']); });
+}
+
+/* ---- Editor mutation helpers ----
+   Renaming an existing raw ingredient or recipe isn't supported yet - every
+   OTHER recipe's ingredient lines reference it by name, and cascading a
+   rename safely (including the six self-referencing add-ons, where the raw
+   ingredient and the recipe share a name on purpose) is real complexity for
+   a case Kane hasn't asked for. Delete and recreate covers a genuine rename
+   for now; this can be added later if it turns out to matter. */
+function whichRecipesUse(ingredientKey) {
+  var users = [];
+  Object.keys(RECIPE_DATA.recipes).forEach(function (key) {
+    RECIPE_DATA.recipes[key].lines.forEach(function (line) {
+      if (String(line.ingredient).trim().toLowerCase() === ingredientKey) users.push(RECIPE_DATA.recipes[key].display);
+    });
+  });
+  return users;
+}
+function addRawIngredient(name) {
+  var key = String(name).trim().toLowerCase();
+  if (!key) return 'Give it a name.';
+  if (RECIPE_DATA.raw[key]) return '"' + name + '" already exists.';
+  RECIPE_DATA.raw[key] = { display: String(name).trim(), measure: 'unit', qty: 1, unit: 'per unit', price: 0, source: 'manual', note: 'Added from the dashboard editor.' };
+  return null;
+}
+function deleteRawIngredient(key) {
+  var users = whichRecipesUse(key);
+  if (users.length) return 'Still used in: ' + users.join(', ') + '. Remove it from those first.';
+  delete RECIPE_DATA.raw[key];
+  return null;
+}
+function addRecipe(name) {
+  var key = String(name).trim().toLowerCase();
+  if (!key) return 'Give it a name.';
+  if (RECIPE_DATA.recipes[key]) return '"' + name + '" already exists.';
+  RECIPE_DATA.recipes[key] = { display: String(name).trim(), category: '', portions: 1, sellPrice: null, sellSource: 'menu', inRollup: true, lines: [] };
+  return null;
+}
+function deleteRecipe(key) {
+  var users = [];
+  Object.keys(RECIPE_DATA.recipes).forEach(function (k) {
+    if (k === key) return;
+    RECIPE_DATA.recipes[k].lines.forEach(function (line) {
+      if (String(line.ingredient).trim().toLowerCase() === key) users.push(RECIPE_DATA.recipes[k].display);
+    });
+  });
+  if (users.length) return 'Still used inside: ' + users.join(', ') + '. Remove it from those first.';
+  delete RECIPE_DATA.recipes[key];
+  return null;
+}
 
 var costingState = {
   overridePrices: {},   /* ingredient name -> { price, note } fetched from /api/ingredient-prices */
   overridesUpdatedAt: null,
   overridesLoaded: false,
+  editActive: false,        /* showing the recipe/ingredient editor instead of the report */
+  editSnapshot: null,       /* deep copy of RECIPE_DATA taken on entering edit mode, for Discard */
+  editProblems: [],         /* validation messages blocking Save, [] when clean */
+  editSaving: false,
+  editSavedAt: null,        /* set briefly after a successful save, for the confirmation banner */
+  editNewItemName: '',      /* live value of the "add new menu item" name field */
+  editNewIngName: '',       /* live value of the "add new raw ingredient" name field */
+  salesLoaded: false,       /* whether the first /api/recipe-sales fetch has returned */
+  salesData: null,          /* raw {from,to,days,byItem,connected} from /api/recipe-sales */
+  salesPeriodDays: 84,      /* 12 weeks default - selector in the UI switches this */
+  salesError: null,
 };
+
+/* Real Square sales, matched to recipes, for the "what actually sells" view
+   below the theoretical report - see the big comment on squareItemSalesSync
+   in worker.js for why this is a separate, approved capability. */
+function fetchItemSales() {
+  var url = '/api/recipe-sales?days=' + costingState.salesPeriodDays;
+  fetch(url).then(function (res) {
+    return res.ok ? res.json() : Promise.reject(new Error('http ' + res.status));
+  }).then(function (data) {
+    costingState.salesData = data;
+    costingState.salesError = null;
+    costingState.salesLoaded = true;
+    if (state.view === 'costing') render();
+  }).catch(function (e) {
+    costingState.salesError = 'Couldn’t load Square sales data.';
+    costingState.salesLoaded = true;
+    if (state.view === 'costing') render();
+  });
+}
+
+/* Matches each Square line-item name (lowercased, trimmed) to a recipe key
+   by exact match only for now - anything that doesn't match is surfaced in
+   "unmatched" rather than silently dropped, since a naming mismatch (Square
+   calling it "Classic Daddy Burger" vs the recipe key "classic daddy") would
+   otherwise quietly understate real sales-mix coverage. */
+function buildSalesMix(report) {
+  var sd = costingState.salesData;
+  if (!sd || !sd.byItem) return null;
+  var itemsByKey = {};
+  report.items.forEach(function (it) { itemsByKey[it.key] = it; });
+
+  var matched = [];
+  var unmatched = [];
+  var totalQty = 0, totalRevenue = 0, totalFoodCost = 0;
+  var matchedRevenue = 0;
+
+  Object.keys(sd.byItem).forEach(function (sqKey) {
+    var row = sd.byItem[sqKey];
+    totalRevenue += row.gross;
+    var it = itemsByKey[sqKey];
+    if (!it) { unmatched.push({ name: row.name, qty: row.qty, revenue: row.gross }); return; }
+    var foodCost = it.cost * row.qty;
+    totalQty += row.qty;
+    totalFoodCost += foodCost;
+    matchedRevenue += row.gross;
+    matched.push({
+      key: it.key, display: it.display, qty: row.qty, revenue: row.gross,
+      foodCost: foodCost, itemPct: row.gross > 0 ? (foodCost / row.gross * 100) : null,
+    });
+  });
+
+  matched.forEach(function (m) { m.popularityPct = totalQty > 0 ? (m.qty / totalQty * 100) : 0; });
+  matched.sort(function (a, b) { return b.revenue - a.revenue; });
+  unmatched.sort(function (a, b) { return b.qty - a.qty; });
+
+  return {
+    days: sd.days, from: sd.from, to: sd.to, connected: sd.connected,
+    matched: matched, unmatched: unmatched,
+    totalQty: totalQty, totalRevenue: totalRevenue, matchedRevenue: matchedRevenue,
+    totalFoodCost: totalFoodCost,
+    actualCogsPct: matchedRevenue > 0 ? (totalFoodCost / matchedRevenue * 100) : null,
+    matchedRevenueSharePct: totalRevenue > 0 ? (matchedRevenue / totalRevenue * 100) : null,
+  };
+}
 
 function fetchIngredientPrices() {
   fetch('/api/ingredient-prices').then(function (res) {
@@ -2159,11 +2391,318 @@ function costingPctClass(pct) {
   if (pct > 27) return 'warn';
   return 'good';
 }
+function costingLineKindTag(recipeKey, ingredientName) {
+  var kind = inferLineKind(recipeKey, ingredientName);
+  if (kind === 'raw') return '<span class="cost-tag">raw ingredient</span>';
+  if (kind === 'raw-self') return '<span class="cost-tag">raw ingredient</span>';
+  if (kind === 'sub-recipe') return '<span class="cost-tag">sub-recipe</span>';
+  return '<span class="cost-tag cost-tag-bad">not found</span>';
+}
+
+function renderCostingEditor(root) {
+  root.appendChild(el('p', 'screen-sub',
+    'Add, resize or remove ingredients and menu items - the cost and COGS% figures recalculate the moment you save. Renaming an existing item isn’t supported yet; delete it and add it again under the new name instead.'));
+
+  /* ---- Save / discard bar ---- */
+  var bar = el('div', 'recon-card fade-in');
+  var barRow = el('div', 'conn-actions');
+  var saveBtn = el('button', 'btn-small', costingState.editSaving ? 'Saving…' : 'Save changes');
+  saveBtn.disabled = costingState.editSaving;
+  saveBtn.onclick = function () {
+    costingState.editSaving = true; render();
+    saveRecipeData(function (problems) {
+      costingState.editSaving = false;
+      costingState.editProblems = problems;
+      if (!problems.length) { costingState.editSavedAt = Date.now(); costingState.editActive = false; }
+      render();
+    });
+  };
+  var discardBtn = el('button', 'btn-plain', 'Discard changes');
+  discardBtn.onclick = function () {
+    RECIPE_DATA = costingState.editSnapshot;
+    costingState.editActive = false;
+    costingState.editProblems = [];
+    render();
+  };
+  barRow.appendChild(saveBtn); barRow.appendChild(discardBtn);
+  bar.appendChild(barRow);
+  if (costingState.editProblems.length) {
+    var probBox = el('div', 'diag');
+    probBox.innerHTML = '<b>Fix these before saving:</b><ul style="margin:0.3rem 0 0 1.1rem; padding:0;">'
+      + costingState.editProblems.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('')
+      + '</ul>';
+    bar.appendChild(probBox);
+  }
+  root.appendChild(bar);
+
+  /* ---- Ingredient library ---- */
+  var ingCard = el('div', 'recon-card fade-in');
+  ingCard.appendChild(el('div', 'recon-metric', 'Ingredient library'));
+  ingCard.appendChild(el('div', 'recon-inst', 'Every raw ingredient recipes can use, with its current size and price. Editing the price here works, but the weekly supplier price check will overwrite it again next update - change prices there for anything permanent; use this for a one-off correction or a brand new ingredient.'));
+  var ingTable = el('div', 'cost-table');
+  var ingHead = el('div', 'cost-row cost-row-head');
+  ingHead.appendChild(el('span', 'cost-col-name', 'Ingredient'));
+  ingHead.appendChild(el('span', 'cost-col-num', 'Pack size'));
+  ingHead.appendChild(el('span', 'cost-col-num', 'Unit'));
+  ingHead.appendChild(el('span', 'cost-col-num', 'Pack price'));
+  ingTable.appendChild(ingHead);
+  Object.keys(RECIPE_DATA.raw).sort().forEach(function (key) {
+    var ing = RECIPE_DATA.raw[key];
+    var row = el('div', 'cost-row');
+    var nameCell = el('span', 'cost-col-name');
+    nameCell.appendChild(document.createTextNode(ing.display || key));
+    var delBtn = el('button', 'btn-tiny', '✕');
+    delBtn.title = 'Remove this ingredient';
+    delBtn.onclick = function () {
+      var err = deleteRawIngredient(key);
+      if (err) { alert(err); return; }
+      render();
+    };
+    nameCell.appendChild(delBtn);
+    row.appendChild(nameCell);
+
+    var qtyInp = document.createElement('input');
+    qtyInp.type = 'number'; qtyInp.step = 'any'; qtyInp.className = 'cost-inp'; qtyInp.value = ing.qty;
+    qtyInp.oninput = function () { ing.qty = parseFloat(qtyInp.value) || 0; };
+    var qtyCell = el('span', 'cost-col-num'); qtyCell.appendChild(qtyInp);
+    row.appendChild(qtyCell);
+
+    var unitInp = document.createElement('input');
+    unitInp.type = 'text'; unitInp.className = 'cost-inp'; unitInp.value = ing.unit || '';
+    unitInp.oninput = function () { ing.unit = unitInp.value; };
+    var unitCell = el('span', 'cost-col-num'); unitCell.appendChild(unitInp);
+    row.appendChild(unitCell);
+
+    var priceInp = document.createElement('input');
+    priceInp.type = 'number'; priceInp.step = 'any'; priceInp.className = 'cost-inp'; priceInp.value = ing.price;
+    priceInp.oninput = function () { ing.price = parseFloat(priceInp.value) || 0; };
+    var priceCell = el('span', 'cost-col-num'); priceCell.appendChild(priceInp);
+    row.appendChild(priceCell);
+
+    ingTable.appendChild(row);
+  });
+  ingCard.appendChild(ingTable);
+
+  var addIngRow = el('div', 'conn-actions');
+  var newIngInp = document.createElement('input');
+  newIngInp.type = 'text'; newIngInp.placeholder = 'New ingredient name'; newIngInp.className = 'cost-inp-wide';
+  newIngInp.value = costingState.editNewIngName;
+  newIngInp.oninput = function () { costingState.editNewIngName = newIngInp.value; };
+  var addIngBtn = el('button', 'btn-small', '+ Add ingredient');
+  addIngBtn.onclick = function () {
+    var err = addRawIngredient(costingState.editNewIngName);
+    if (err) { alert(err); return; }
+    costingState.editNewIngName = '';
+    render();
+  };
+  addIngRow.appendChild(newIngInp); addIngRow.appendChild(addIngBtn);
+  ingCard.appendChild(addIngRow);
+  root.appendChild(ingCard);
+
+  /* ---- Menu items / recipes ---- */
+  var recCard = el('div', 'recon-card fade-in');
+  recCard.appendChild(el('div', 'recon-metric', 'Menu items & recipes'));
+  recCard.appendChild(el('div', 'recon-inst', 'Each ingredient line shows what it resolved to - a plain ingredient, another recipe used as an ingredient (a sauce inside a burger, say), or "not found" if it doesn’t match anything in the library yet.'));
+
+  Object.keys(RECIPE_DATA.recipes).sort().forEach(function (key) {
+    var rec = RECIPE_DATA.recipes[key];
+    var card = el('div', 'cost-edit-item');
+    var itemHead = el('div', 'conn-actions');
+    itemHead.appendChild(el('span', 'cost-edit-title', rec.display));
+    var delRecBtn = el('button', 'btn-tiny', 'Delete item');
+    delRecBtn.onclick = function () {
+      var err = deleteRecipe(key);
+      if (err) { alert(err); return; }
+      render();
+    };
+    itemHead.appendChild(delRecBtn);
+    card.appendChild(itemHead);
+
+    var fieldsRow = el('div', 'cost-edit-fields');
+    function labeledField(label, inputEl) {
+      var wrap = el('span', 'cost-edit-field');
+      wrap.appendChild(el('span', 'cost-edit-flabel', label));
+      wrap.appendChild(inputEl);
+      return wrap;
+    }
+    var catInp = document.createElement('input');
+    catInp.type = 'text'; catInp.className = 'cost-inp'; catInp.value = rec.category || '';
+    catInp.oninput = function () { rec.category = catInp.value; };
+    fieldsRow.appendChild(labeledField('Category', catInp));
+
+    var portInp = document.createElement('input');
+    portInp.type = 'number'; portInp.step = 'any'; portInp.className = 'cost-inp'; portInp.value = rec.portions;
+    portInp.oninput = function () { rec.portions = parseFloat(portInp.value) || 1; };
+    fieldsRow.appendChild(labeledField('Portions/batch yield', portInp));
+
+    var sellInp = document.createElement('input');
+    sellInp.type = 'number'; sellInp.step = 'any'; sellInp.className = 'cost-inp'; sellInp.value = rec.sellPrice != null ? rec.sellPrice : '';
+    sellInp.oninput = function () { rec.sellPrice = sellInp.value === '' ? null : (parseFloat(sellInp.value) || 0); rec.sellSource = 'menu'; };
+    fieldsRow.appendChild(labeledField('Sell price', sellInp));
+
+    var rollupLabel = document.createElement('label'); rollupLabel.className = 'cost-edit-field';
+    var rollupChk = document.createElement('input'); rollupChk.type = 'checkbox'; rollupChk.checked = !!rec.inRollup;
+    rollupChk.onchange = function () { rec.inRollup = rollupChk.checked; };
+    rollupLabel.appendChild(rollupChk);
+    rollupLabel.appendChild(document.createTextNode(' Counts in overall COGS% (uncheck for a batch sauce/prep item)'));
+    fieldsRow.appendChild(rollupLabel);
+
+    card.appendChild(fieldsRow);
+
+    var linesTable = el('div', 'cost-table');
+    rec.lines.forEach(function (line, idx) {
+      var lrow = el('div', 'cost-row-batch');
+      var ingInp = document.createElement('input');
+      ingInp.type = 'text'; ingInp.className = 'cost-inp-wide'; ingInp.value = line.ingredient;
+      ingInp.oninput = function () { line.ingredient = ingInp.value; tagSpan.innerHTML = costingLineKindTag(key, ingInp.value); };
+      var qInp = document.createElement('input');
+      qInp.type = 'number'; qInp.step = 'any'; qInp.className = 'cost-inp'; qInp.value = line.qty;
+      qInp.oninput = function () { line.qty = parseFloat(qInp.value) || 0; };
+      var tagSpan = el('span', null, costingLineKindTag(key, line.ingredient));
+      var rmBtn = el('button', 'btn-tiny', '✕');
+      rmBtn.onclick = function () { rec.lines.splice(idx, 1); render(); };
+      lrow.appendChild(ingInp); lrow.appendChild(qInp); lrow.appendChild(tagSpan); lrow.appendChild(rmBtn);
+      linesTable.appendChild(lrow);
+    });
+    card.appendChild(linesTable);
+
+    var addLineBtn = el('button', 'btn-tiny', '+ Add ingredient line');
+    addLineBtn.onclick = function () { rec.lines.push({ ingredient: '', qty: 0, kind: null }); render(); };
+    card.appendChild(addLineBtn);
+
+    recCard.appendChild(card);
+  });
+
+  var addRecRow = el('div', 'conn-actions');
+  var newRecInp = document.createElement('input');
+  newRecInp.type = 'text'; newRecInp.placeholder = 'New menu item name'; newRecInp.className = 'cost-inp-wide';
+  newRecInp.value = costingState.editNewItemName;
+  newRecInp.oninput = function () { costingState.editNewItemName = newRecInp.value; };
+  var addRecBtn = el('button', 'btn-small', '+ Add menu item');
+  addRecBtn.onclick = function () {
+    var err = addRecipe(costingState.editNewItemName);
+    if (err) { alert(err); return; }
+    costingState.editNewItemName = '';
+    render();
+  };
+  addRecRow.appendChild(newRecInp); addRecRow.appendChild(addRecBtn);
+  recCard.appendChild(addRecRow);
+  root.appendChild(recCard);
+}
+
+/* "Real sales mix" - actual food cost weighted by what Square says really
+   sold, not an equal-weighted menu average. Shows which items to actually
+   worry about (high volume x high cost), not just which have the worst %. */
+function renderSalesMix(root, report) {
+  var card = el('div', 'recon-card fade-in');
+  var head = el('div', 'recon-head');
+  head.appendChild(el('span', 'recon-metric', 'Real sales mix (Square)'));
+  var periodWrap = el('span');
+  [{ d: 28, label: '4 weeks' }, { d: 84, label: '12 weeks' }, { d: 182, label: '26 weeks' }].forEach(function (p) {
+    var b = el('button', 'btn-tiny' + (costingState.salesPeriodDays === p.d ? ' btn-tiny-active' : ''), p.label);
+    b.style.marginLeft = '0.35rem';
+    b.onclick = function () { costingState.salesPeriodDays = p.d; costingState.salesLoaded = false; fetchItemSales(); render(); };
+    periodWrap.appendChild(b);
+  });
+  head.appendChild(periodWrap);
+  card.appendChild(head);
+
+  if (costingState.salesError) {
+    card.appendChild(el('div', 'recon-inst', esc(costingState.salesError)));
+    root.appendChild(card);
+    return;
+  }
+  if (!costingState.salesLoaded) {
+    card.appendChild(el('div', 'recon-inst', 'Loading Square sales…'));
+    root.appendChild(card);
+    return;
+  }
+  if (costingState.salesData && costingState.salesData.connected === false) {
+    card.appendChild(el('div', 'recon-inst', 'Square isn’t connected yet - connect it under Connections to see real sales-mix and actual food cost here.'));
+    root.appendChild(card);
+    return;
+  }
+
+  var mix = buildSalesMix(report);
+  if (!mix || !mix.days) {
+    card.appendChild(el('div', 'recon-inst', 'No Square sales data stored for this period yet - it backfills automatically in the background and will fill in over the next little while.'));
+    root.appendChild(card);
+    return;
+  }
+
+  var summaryLine = 'Over ' + mix.days + ' day' + (mix.days === 1 ? '' : 's') + ' of Square sales'
+    + (mix.actualCogsPct != null ? ', actual sales-weighted food cost is ' : ', ')
+    + (mix.actualCogsPct != null ? '<b class="' + costingPctClass(mix.actualCogsPct) + '">' + mix.actualCogsPct.toFixed(1) + '%</b> of revenue for matched items' : 'no matched items yet')
+    + (report.overallPct != null ? ' (vs ' + report.overallPct.toFixed(1) + '% theoretical menu average).' : '.');
+  card.appendChild(el('div', 'recon-inst', summaryLine));
+  if (mix.matchedRevenueSharePct != null) {
+    card.appendChild(el('div', 'recon-inst',
+      mix.matchedRevenueSharePct.toFixed(0) + '% of Square revenue in this period matched to a recipe here; the rest is listed as "not matched" below - usually a naming difference between Square and the recipe name that’s easy to fix.'));
+  }
+
+  if (mix.matched.length) {
+    var table = el('div', 'cost-table cost-table-mix');
+    var thead = el('div', 'cost-row cost-row-head');
+    thead.appendChild(el('span', 'cost-col-name', 'Item'));
+    thead.appendChild(el('span', 'cost-col-num', 'Qty sold'));
+    thead.appendChild(el('span', 'cost-col-num', 'Popularity'));
+    thead.appendChild(el('span', 'cost-col-num', 'Revenue'));
+    thead.appendChild(el('span', 'cost-col-num', 'Food cost'));
+    thead.appendChild(el('span', 'cost-col-num', 'Item COGS%'));
+    table.appendChild(thead);
+    mix.matched.slice(0, 25).forEach(function (m) {
+      var row = el('div', 'cost-row');
+      row.appendChild(el('span', 'cost-col-name', esc(m.display)));
+      row.appendChild(el('span', 'cost-col-num', m.qty % 1 === 0 ? String(m.qty) : m.qty.toFixed(1)));
+      row.appendChild(el('span', 'cost-col-num', m.popularityPct.toFixed(1) + '%'));
+      row.appendChild(el('span', 'cost-col-num', fmtMoney(m.revenue, true)));
+      row.appendChild(el('span', 'cost-col-num', fmtMoney(m.foodCost, true)));
+      var pctCell = el('span', 'cost-col-num' + (m.itemPct != null ? ' ' + costingPctClass(m.itemPct) : ''));
+      pctCell.textContent = m.itemPct != null ? m.itemPct.toFixed(1) + '%' : '—';
+      row.appendChild(pctCell);
+      table.appendChild(row);
+    });
+    card.appendChild(table);
+    if (mix.matched.length > 25) {
+      card.appendChild(el('div', 'recon-inst', '+ ' + (mix.matched.length - 25) + ' more lower-revenue items not shown.'));
+    }
+  }
+
+  if (mix.unmatched.length) {
+    var unCard = el('div', 'recon-inst');
+    unCard.style.marginTop = '0.6rem';
+    var names = mix.unmatched.slice(0, 15).map(function (u) { return esc(u.name) + ' (' + (u.qty % 1 === 0 ? u.qty : u.qty.toFixed(1)) + ' sold)'; }).join(', ');
+    unCard.innerHTML = '<b>Not matched to a recipe (' + mix.unmatched.length + '):</b> ' + names
+      + (mix.unmatched.length > 15 ? ', + ' + (mix.unmatched.length - 15) + ' more' : '')
+      + '. These sold in Square but the name doesn’t exactly match a recipe key here - rename either side (in Square, or via "Edit recipes & ingredients") to bring them into the sales-weighted numbers above.';
+    card.appendChild(unCard);
+  }
+
+  root.appendChild(card);
+}
+
 function renderCosting(root) {
-  root.appendChild(el('div', 'screen-title', 'Recipe costing'));
+  var head = el('div', 'recon-head');
+  head.appendChild(el('div', 'screen-title', 'Recipe costing'));
+  var editBtn = el('button', 'btn-small', costingState.editActive ? 'Back to report' : 'Edit recipes & ingredients');
+  editBtn.onclick = function () {
+    if (!costingState.editActive) {
+      costingState.editSnapshot = deepClone(RECIPE_DATA);
+      costingState.editProblems = [];
+      costingState.editActive = true;
+    } else {
+      costingState.editActive = false;
+    }
+    render();
+  };
+  head.appendChild(editBtn);
+  root.appendChild(head);
+
+  if (costingState.editActive) { renderCostingEditor(root); return; }
+
   root.appendChild(el('p', 'screen-sub',
     'Theoretical cost and Cost-of-goods % for every menu item, worked out from ingredient quantities × current supplier prices - not what you actually spent, what the menu SHOULD cost if every dish were made exactly to spec with zero waste. '
-    + 'Ingredient prices come from the weekly supplier price check and update here automatically (no redeploy needed); the recipes themselves (what goes in each dish, and how much) are built into the dashboard and only change when your menu does.'));
+    + 'Ingredient prices come from the weekly supplier price check and update here automatically (no redeploy needed); the recipes themselves (what goes in each dish, and how much) update instantly here too - use "Edit recipes & ingredients" above.'));
 
   var report = buildCostingReport();
 
@@ -2190,9 +2729,11 @@ function renderCosting(root) {
 
   var note = el('div', 'recon-card fade-in');
   note.appendChild(el('div', 'recon-inst',
-    '<b>Why this won’t exactly match your actual COGS%.</b> Two structural reasons, both by design: (1) this counts every raw ingredient at true cost, including Windsor Farm Shop veg you pay cash for and which never appears in your actual COGS/workbook figures - so theoretical will always run a bit above actual’s "missing" cash spend, in the other direction. (2) this is an equal-weighted average across the menu, not weighted by how many of each item you actually sell - a highly-discounted-margin item selling in huge volume moves your real COGS% more than it moves this average. Sales-mix weighting from Square is planned as a fast follow.'
+    '<b>Why this won’t exactly match your actual COGS%.</b> Two structural reasons, both by design: (1) this counts every raw ingredient at true cost, including Windsor Farm Shop veg you pay cash for and which never appears in your actual COGS/workbook figures - so theoretical will always run a bit above actual’s "missing" cash spend, in the other direction. (2) this is an equal-weighted average across the menu, not weighted by how many of each item you actually sell - a highly-discounted-margin item selling in huge volume moves your real COGS% more than it moves this average. The "Real sales mix" section below fixes (2) using your actual Square sales.'
   ));
   root.appendChild(note);
+
+  renderSalesMix(root, report);
 
   /* Top cost-driving ingredients */
   if (report.topIngredients.length) {
@@ -2274,7 +2815,7 @@ function renderCosting(root) {
     + '<li>"Caramelised onion" is a $1 menu add-on with no ingredient recipe in the costing sheet at all, so it isn’t costed here.</li>'
     + '<li>"Bacon & egg burger" rarely sells and isn’t on the printed menu - shown at its last known sell price rather than a current one.</li>'
     + '<li>29 ingredients (mostly pantry items like sauces, spices and packaging) aren’t tracked in the weekly supplier check - these use the recipe sheet’s original price until they’re added to that tracker.</li>'
-    + '<li>This isn’t weighted by how much of each item actually sells (that needs Square’s item-level sales mix) - it’s an equal-weighted menu average, and any item Square sells with no matching recipe here isn’t flagged yet. Both are planned as a fast follow.</li>'
+    + '<li>The main table above is still an equal-weighted menu average (every dish counted once). The "Real sales mix" section below is the sales-weighted version, from your actual Square sales - use that one for "what\'s really driving my food cost".</li>'
     + '</ul>'
   ));
   root.appendChild(gaps);
@@ -2746,6 +3287,8 @@ state.period = normalizePeriodKey(SETTINGS.defaultPeriod) || 'week:0';
 render();
 fetchData();
 fetchIngredientPrices();
+fetchRecipes();
+fetchItemSales();
 </script>
 </body>
 </html>
