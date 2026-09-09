@@ -522,7 +522,16 @@ var METRIC_DEFS = {
                   decision: 'Fixed costs drifting up? Review subscriptions, utilities and new recurring spend.' },
   profit:       { label: 'Profit', fmt: 'money', dual: true, needs: ['accounting'], goodDir: 'up',
                   def: 'Revenue less cost of sales, wages, super and overheads · from ' + P.accounting,
-                  decision: 'What the venue keeps after the costs you control. The bottom line of the board.' }
+                  decision: 'What the venue keeps after the costs you control. The bottom line of the board.' },
+  /* Discounts given: not a card (never in KIT_CONFIG.metrics/CHOSEN, so this
+     never renders a metricCard) - this entry exists only so trendBars/
+     trendSeries/managerSparkRow/trendLabel, which all key off METRIC_DEFS,
+     can show a trend for it too. No target: goodDir is set for a possible
+     future target, but metricTarget('discount') is null until one exists,
+     so it always renders as plain bars. */
+  discount:     { label: 'Discounts given', fmt: 'money', needs: [], goodDir: 'down',
+                  def: 'Discounts you’ve entered against sales, ' + KIT_CONFIG.taxLabel + ' · typed in below',
+                  decision: 'How much revenue discounting is giving away. Watch for it creeping up unnoticed.' }
 };
 var CHOSEN = KIT_CONFIG.metrics.filter(function (k) { return METRIC_DEFS[k]; });
 
@@ -1754,7 +1763,42 @@ function renderDashboard(root) {
   var shopMetrics = ['revenue', 'transactions', 'acs', 'cogs'];
   CHOSEN.filter(function (k) { return curLoc() === 'combined' || shopMetrics.indexOf(k) >= 0; })
     .forEach(function (k) { grid.appendChild(metricCard(k, cur, prev, yoy, r)); });
+  grid.appendChild(discountCard(cur, prev, yoy, r));
   root.appendChild(grid);
+}
+
+/* Discounts given: not a metricCard (it has no live source, so the standard
+   "not configured until connected" framing doesn't fit), just its own small
+   card - current figure, comparisons, and now a trend, same as the other
+   cards get. Always shown, since it's your own entry whenever you make one. */
+function discountCard(cur, prev, yoy, r) {
+  var card = el('div', 'mcard fade-in');
+  if (cur._manual && cur._manual.discount) card.appendChild(el('span', 'm-tag tag-manual', 'Entered by you'));
+  card.appendChild(el('div', 'm-label', 'Discounts given'));
+  var v = cur.discount;
+  var f = el('div', 'm-fig');
+  f.appendChild(el('div', 'm-pri', v == null ? '—' : fmtMoney(v, false)));
+  var figs = el('div', 'm-figs'); figs.appendChild(f);
+  card.appendChild(figs);
+  if (v == null) {
+    card.appendChild(el('div', 'notconf-msg', 'Nothing entered yet for this period. Add it below and it shows here, trend included.'));
+  } else {
+    var cmp1 = compare('discount', v, prev.discount);
+    var row1 = el('div', 'cmp-row');
+    row1.appendChild(el('span', 'cmp-lab', esc(r.prevLabel)));
+    row1.appendChild(cmpVal(cmp1));
+    card.appendChild(row1);
+    if (r.yoy) {
+      var cmp2 = compare('discount', v, yoy.discount);
+      var row2 = el('div', 'cmp-row');
+      row2.appendChild(el('span', 'cmp-lab', esc(r.yoyLabel)));
+      row2.appendChild(cmpVal(cmp2));
+      card.appendChild(row2);
+    }
+  }
+  card.appendChild(trendBars('discount', r));
+  card.appendChild(el('div', 'm-def', 'Discounts you’ve typed in against sales, ' + KIT_CONFIG.taxLabel + '. Purely your own figure - there’s no live source for it.'));
+  return card;
 }
 
 /* ---------- Manager view ----------
@@ -2011,6 +2055,7 @@ function renderManager(root) {
     else card.appendChild(managerMeterRow(k, cur));
   });
   card.appendChild(managerDiscountRow(loc, cur));
+  card.appendChild(managerSparkRow('discount', loc, r));
 
   root.appendChild(card);
 }
@@ -2336,6 +2381,7 @@ function trendSeries(key, locOverride, granularity) {  /* locOverride lets a cal
     if (key === 'revenue') return effRev;
     if (key === 'transactions') return effCount(i, ub);
     if (key === 'acs') { var c = effCount(i, ub); return (effRev == null || c == null || c === 0) ? null : effRev / c; }
+    if (key === 'discount') return disc; /* purely typed in - never depends on revenue existing */
     if (effRev == null || effRev === 0) return null;
     var cg = effField('cogs', cogArr, i, ov), wg = at(acc.wagesSuper, i), oh = at(acc.overheads, i);
     if (key === 'cogs') return (cg == null) ? null : (cg / effRev) * 100;
