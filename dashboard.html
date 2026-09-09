@@ -313,11 +313,12 @@ body {
 .mgr-cell-delta.good { color: var(--c-green); }
 .mgr-cell-delta.warn { color: var(--c-amber); }
 .mgr-cell-delta.bad { color: var(--c-coral); }
-.mgr-spark { display: flex; align-items: flex-end; gap: 3px; height: 30px; }
+.mgr-spark { display: flex; align-items: flex-end; gap: 3px; height: 30px; position: relative; }
 .mgr-spark div { flex: 1; border-radius: 2px 2px 0 0; background: rgba(253,224,71,0.5); min-height: 2px; }
 .mgr-spark div.cur { background: var(--gold); }
 .mgr-spark div.good { background: var(--c-green); }
 .mgr-spark div.bad { background: var(--c-coral); }
+.mgr-target-line { position: absolute; left: 0; right: 0; height: 0; flex: none; min-height: 0; border-top: 1px dashed var(--text); opacity: 0.55; background: none; pointer-events: none; }
 .mgr-meter-track { position: relative; height: 10px; border-radius: 5px; background: var(--cream3); overflow: hidden; }
 @media print {
   .nav, .control-bar, .fresh-row, #go-conn, .btn-plain, .mgr-print-btn { display: none !important; }
@@ -1304,10 +1305,14 @@ function managerSparkRow(key, loc, r) {
   var row = el('div', 'mgr-row');
   row.appendChild(el('div', 'mgr-lab', esc(METRIC_DEFS[key].label)));
   var viz = el('div', 'mgr-viz');
+  var tgt = metricTarget(key);
   if (series && series.values.some(function (x) { return x != null; })) {
     var vals = series.values.slice(-8);
     var labs = series.months.slice(-8);
-    var max = Math.max.apply(null, vals.filter(function (x) { return x != null; }).concat([0]));
+    /* Widen the scale to always include the target, same as the main Dashboard's
+       trend chart, so a target line is never off the top of the bars just
+       because trade has consistently cleared (or missed) it. */
+    var max = Math.max.apply(null, vals.filter(function (x) { return x != null; }).concat([0], tgt != null ? [tgt] : []));
     var spark = el('div', 'mgr-spark');
     vals.forEach(function (v, i) {
       var bar = document.createElement('div');
@@ -1318,6 +1323,12 @@ function managerSparkRow(key, loc, r) {
       bar.setAttribute('data-lab', lab + ' · ' + (v == null ? 'no data' : trendLabel(key, v)));
       spark.appendChild(bar);
     });
+    if (tgt != null && max > 0) {
+      var tline = document.createElement('div');
+      tline.className = 'mgr-target-line';
+      tline.style.bottom = Math.max(0, Math.min(100, (tgt / max) * 100)).toFixed(1) + '%';
+      spark.appendChild(tline);
+    }
     attachBarTip(spark);
     viz.appendChild(spark);
   } else {
