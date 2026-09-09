@@ -227,6 +227,33 @@ body {
 .cost-row-over .cost-tag { color: #6b2510; background: rgba(107,37,16,0.1); }
 .cost-table-mix .cost-row { grid-template-columns: 1fr 70px 80px 90px 90px 80px; }
 @media (max-width: 640px) { .cost-table-mix .cost-row { grid-template-columns: 1fr 55px 60px; font-size: 12px; } .cost-table-mix .cost-col-num:nth-child(4), .cost-table-mix .cost-col-num:nth-child(5) { display: none; } }
+.sim-table .cost-row { grid-template-columns: 1fr 60px 85px 90px 90px 90px 95px; }
+@media (max-width: 760px) { .sim-table .cost-row { grid-template-columns: 1fr 70px 80px 80px; font-size: 12px; } .sim-table .cost-col-num:nth-child(3), .sim-table .cost-col-num:nth-child(6) { display: none; } }
+.sim-row-changed { background: rgba(255,193,7,0.08); border-radius: 8px; }
+.sim-hidden { display: none !important; }
+.sim-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-top: 0.6rem; }
+.sim-summary-cell { padding: 0.5rem 0.7rem; background: var(--panel-2, rgba(255,255,255,0.03)); border-radius: 8px; }
+.sim-summary-label { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 0.3rem; }
+.sim-summary-row { display: flex; align-items: baseline; gap: 0.4rem; font-size: 16px; font-weight: 600; }
+.sim-summary-old { color: var(--muted); font-weight: 400; }
+.sim-summary-arrow { color: var(--muted); font-weight: 400; font-size: 13px; }
+.sim-changed { color: var(--accent) !important; }
+.sim-up { color: var(--c-mint, #3fae6a); }
+.sim-down { color: var(--c-coral); }
+.sim-quadrant { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; margin-top: 0.6rem; }
+@media (max-width: 640px) { .sim-quadrant { grid-template-columns: 1fr; } }
+.sim-q-box { padding: 0.7rem 0.8rem; border-radius: 10px; border: 1px solid var(--border); }
+.sim-q-title { font-weight: 700; font-size: 13px; margin-bottom: 0.35rem; }
+.sim-q-items { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.sim-q-hero { background: rgba(63,174,106,0.08); border-color: rgba(63,174,106,0.3); }
+.sim-q-hero .sim-q-title { color: #3fae6a; }
+.sim-q-staple { background: rgba(255,193,7,0.07); border-color: rgba(255,193,7,0.3); }
+.sim-q-staple .sim-q-title { color: #c98a00; }
+.sim-q-gem { background: rgba(94,143,255,0.08); border-color: rgba(94,143,255,0.3); }
+.sim-q-gem .sim-q-title { color: #5e8fff; }
+.sim-q-snail { background: var(--c-coral-bg); border-color: var(--c-coral-border); }
+.sim-q-snail .sim-q-title { color: #b1442e; }
+.sim-q-snail .sim-q-items { color: #6b2510; }
 .cost-col-name { color: var(--black); }
 .cost-col-num { text-align: right; font-variant-numeric: tabular-nums; }
 .cost-tag { display: inline-block; font-size: 10.5px; font-weight: 600; color: var(--muted); background: var(--cream2); border-radius: 6px; padding: 1px 6px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.02em; }
@@ -1202,6 +1229,7 @@ var costingState = {
   salesData: null,          /* raw {from,to,days,byItem,connected} from /api/recipe-sales */
   salesPeriodDays: 84,      /* 12 weeks default - selector in the UI switches this */
   salesError: null,
+  simOverrides: {},         /* itemKey -> { cost: '<raw input string>'|null, sell: '<raw input string>'|null } - the Menu simulator's what-if layer. Never touches RECIPE_DATA - purely a scenario on top of it, so trying "what if I dropped the price 50c" never risks the real recipe/menu data. null/'' means "use current". */
 };
 
 /* Real Square sales, matched to recipes, for the "what actually sells" view
@@ -1468,8 +1496,8 @@ function render() {
   /* Nav */
   var nav = el('div', 'nav');
   var tabs = isManual()
-    ? [ { key: 'dashboard', label: 'Dashboard' }, { key: 'manager', label: 'Manager view' }, { key: 'costing', label: 'Recipe costing' }, { key: 'enter', label: 'Enter numbers' }, { key: 'settings', label: 'Settings' } ]
-    : [ { key: 'dashboard', label: 'Dashboard' }, { key: 'manager', label: 'Manager view' }, { key: 'costing', label: 'Recipe costing' }, { key: 'connections', label: 'Connections' }, { key: 'recon', label: 'Check your numbers' }, { key: 'settings', label: 'Settings' } ];
+    ? [ { key: 'dashboard', label: 'Dashboard' }, { key: 'manager', label: 'Manager view' }, { key: 'costing', label: 'Recipe costing' }, { key: 'simulator', label: 'Menu simulator' }, { key: 'enter', label: 'Enter numbers' }, { key: 'settings', label: 'Settings' } ]
+    : [ { key: 'dashboard', label: 'Dashboard' }, { key: 'manager', label: 'Manager view' }, { key: 'costing', label: 'Recipe costing' }, { key: 'simulator', label: 'Menu simulator' }, { key: 'connections', label: 'Connections' }, { key: 'recon', label: 'Check your numbers' }, { key: 'settings', label: 'Settings' } ];
   tabs.forEach(function (t) {
     var b = el('button', 'nav-tab' + (state.view === t.key ? ' active' : ''));
     b.innerHTML = t.label + ((t.key === 'recon' && anyConfiguredSource() && unconfirmedConnectedMetrics().length) ? '<span class="dot"></span>' : '');
@@ -1505,6 +1533,7 @@ function render() {
   if (state.view === 'dashboard') renderDashboard(root);
   else if (state.view === 'manager') renderManager(root);
   else if (state.view === 'costing') renderCosting(root);
+  else if (state.view === 'simulator') renderSimulator(root);
   else if (state.view === 'enter') renderManualEntry(root);
   else if (state.view === 'connections') renderConnections(root);
   else if (state.view === 'recon') renderRecon(root);
@@ -2679,6 +2708,319 @@ function renderSalesMix(root, report) {
   }
 
   root.appendChild(card);
+}
+
+/* ============================================================
+   Menu simulator - "what if I changed this price/recipe" +
+   Snail/Staple/Hidden Gem/Hero menu-engineering quadrant.
+   Modelled on Kane's own reference spreadsheet (Menu Change
+   Forecaster + current/proposed-menu quadrant sheets). Never
+   touches RECIPE_DATA - this is a scenario layer on top of the
+   real cost engine + real Square sales mix, so nothing here can
+   accidentally change what's actually costed or sold. Profit
+   impact is the change per unit x how many units actually sold
+   in the selected period, i.e. "if my last N days repeated with
+   this price/cost instead" - not a demand forecast; changing a
+   price could itself change how many sell, which this can't know.
+============================================================ */
+function simOverrideNum(key, field, fallback) {
+  var ov = costingState.simOverrides[key];
+  var raw = ov ? ov[field] : null;
+  if (raw == null || raw === '') return fallback;
+  var n = Number(raw);
+  return isFinite(n) ? n : fallback;
+}
+function simHasOverride(key) {
+  var ov = costingState.simOverrides[key];
+  return !!(ov && ((ov.cost != null && ov.cost !== '') || (ov.sell != null && ov.sell !== '')));
+}
+
+/* One row per sellable recipe item that's had at least one real Square sale
+   in the selected period - profit-impact math needs a real quantity, and an
+   item with zero recent sales would either vanish (0 weight) or need a
+   made-up number, so it's left out of the simulator/quadrant rather than
+   guessed. (It's still fully editable in "Edit recipes & ingredients".) */
+function buildSimRows(report, mix) {
+  if (!mix) return [];
+  var rows = [];
+  report.items.filter(function (it) { return it.inRollup; }).forEach(function (it) {
+    var salesRow = mix.matched.filter(function (m) { return m.key === it.key; })[0];
+    if (!salesRow || !salesRow.qty) return;
+    var proposedCost = simOverrideNum(it.key, 'cost', it.cost);
+    var proposedSell = simOverrideNum(it.key, 'sell', it.sell);
+    var currentGP = (it.sell != null && it.sell > 0) ? ((it.sell - it.cost) / it.sell * 100) : null;
+    var proposedGP = (proposedSell != null && proposedSell > 0) ? ((proposedSell - proposedCost) / proposedSell * 100) : null;
+    var currentProfitUnit = (it.sell != null) ? (it.sell - it.cost) : null;
+    var proposedProfitUnit = (proposedSell != null) ? (proposedSell - proposedCost) : null;
+    var profitImpact = (currentProfitUnit != null && proposedProfitUnit != null) ? (proposedProfitUnit - currentProfitUnit) * salesRow.qty : null;
+    rows.push({
+      key: it.key, display: it.display, category: it.category,
+      qty: salesRow.qty, popularityPct: salesRow.popularityPct, revenue: salesRow.revenue,
+      currentCost: it.cost, currentSell: it.sell, currentGP: currentGP,
+      proposedCost: proposedCost, proposedSell: proposedSell, proposedGP: proposedGP,
+      profitImpact: profitImpact, hasOverride: simHasOverride(it.key),
+    });
+  });
+  return rows;
+}
+
+function simRollup(rows) {
+  var curRevenue = 0, curFoodCost = 0, propRevenue = 0, propFoodCost = 0, netChange = 0;
+  rows.forEach(function (r) {
+    curRevenue += (r.currentSell || 0) * r.qty;
+    curFoodCost += r.currentCost * r.qty;
+    propRevenue += (r.proposedSell || 0) * r.qty;
+    propFoodCost += r.proposedCost * r.qty;
+    if (r.profitImpact != null) netChange += r.profitImpact;
+  });
+  var oldGP = curRevenue > 0 ? ((curRevenue - curFoodCost) / curRevenue * 100) : null;
+  var newGP = propRevenue > 0 ? ((propRevenue - propFoodCost) / propRevenue * 100) : null;
+  return {
+    oldGP: oldGP, newGP: newGP,
+    oldCogs: oldGP != null ? (100 - oldGP) : null, newCogs: newGP != null ? (100 - newGP) : null,
+    netChange: netChange, curRevenue: curRevenue, propRevenue: propRevenue,
+  };
+}
+
+/* Classic 2x2 menu-engineering split (Kasavana & Smith): popularity vs
+   profitability, each split at the group's own average - "high" means
+   better than the average item, not an absolute number. Uses whatever's
+   currently in effect (proposed where Kane's simulated a change, current
+   otherwise), so nudging a price live moves an item between boxes. */
+function buildQuadrant(rows) {
+  if (!rows.length) return null;
+  var avgPop = rows.reduce(function (s, r) { return s + r.popularityPct; }, 0) / rows.length;
+  var gpVals = rows.map(function (r) { return r.proposedGP != null ? r.proposedGP : r.currentGP; }).filter(function (v) { return v != null; });
+  var avgGP = gpVals.length ? gpVals.reduce(function (s, v) { return s + v; }, 0) / gpVals.length : 0;
+  var boxes = { hero: [], staple: [], hiddenGem: [], snail: [] };
+  rows.forEach(function (r) {
+    var gp = r.proposedGP != null ? r.proposedGP : r.currentGP;
+    var highPop = r.popularityPct >= avgPop;
+    var highProfit = gp != null && gp >= avgGP;
+    if (highPop && highProfit) boxes.hero.push(r);
+    else if (highPop && !highProfit) boxes.staple.push(r);
+    else if (!highPop && highProfit) boxes.hiddenGem.push(r);
+    else boxes.snail.push(r);
+  });
+  return { boxes: boxes, avgPop: avgPop, avgGP: avgGP };
+}
+
+function renderSimulator(root) {
+  root.appendChild(el('div', 'screen-title', 'Menu simulator'));
+  root.appendChild(el('p', 'screen-sub',
+    'Try a price change or a recipe tweak here first and see the profit impact before you touch the real menu or recipes. '
+    + 'Uses your real Square sales mix from the Recipe costing tab, so the impact is "if my recent sales repeated at this price/cost" - not a forecast of how a price change would affect how many you actually sell.'));
+
+  if (costingState.salesError) { root.appendChild(el('div', 'recon-card fade-in', '<div class="recon-inst">' + esc(costingState.salesError) + '</div>')); return; }
+  if (!costingState.salesLoaded) { root.appendChild(el('div', 'recon-card fade-in', '<div class="recon-inst">Loading Square sales…</div>')); return; }
+  if (costingState.salesData && costingState.salesData.connected === false) {
+    root.appendChild(el('div', 'recon-card fade-in', '<div class="recon-inst">Square isn’t connected yet - connect it under Connections, then this tab can simulate changes against your real sales mix.</div>'));
+    return;
+  }
+
+  var report = buildCostingReport();
+  var mix = buildSalesMix(report);
+  var rows = buildSimRows(report, mix);
+
+  if (!rows.length) {
+    root.appendChild(el('div', 'recon-card fade-in', '<div class="recon-inst">No matched Square sales in the current period yet, so there’s nothing to simulate against - it backfills automatically, or widen the period on the Recipe costing tab.</div>'));
+    return;
+  }
+
+  rows.sort(function (a, b) { return b.revenue - a.revenue; });
+  var anyOverride = rows.some(function (r) { return r.hasOverride; });
+  var rowRefs = []; /* filled in below - {r, rowEl, propGpCell, impactCell} for the live recompute() */
+
+  /* ---- Summary / rollup ---- */
+  var summary = el('div', 'recon-card fade-in');
+  var sHead = el('div', 'recon-head');
+  sHead.appendChild(el('span', 'recon-metric', 'Current vs proposed, over ' + (costingState.salesData.days || 0) + ' days'));
+  var resetBtn = el('button', 'btn-tiny' + (anyOverride ? '' : ' sim-hidden'), 'Reset all simulated changes');
+  resetBtn.onclick = function () { costingState.simOverrides = {}; render(); };
+  sHead.appendChild(resetBtn);
+  summary.appendChild(sHead);
+
+  var grid = el('div', 'sim-summary-grid');
+  function metricCell(label, isPct) {
+    var c = el('div', 'sim-summary-cell');
+    c.appendChild(el('div', 'sim-summary-label', label));
+    var row = el('div', 'sim-summary-row');
+    var oldSpan = el('span', 'sim-summary-old', '—');
+    var newSpan = el('span', 'sim-summary-new', '—');
+    row.appendChild(oldSpan);
+    row.appendChild(el('span', 'sim-summary-arrow', '→'));
+    row.appendChild(newSpan);
+    c.appendChild(row);
+    return { el: c, oldSpan: oldSpan, newSpan: newSpan, isPct: isPct };
+  }
+  var gpCell = metricCell('Sales-weighted GP%', true);
+  var cogsCell = metricCell('Sales-weighted COGS%', true);
+  grid.appendChild(gpCell.el);
+  grid.appendChild(cogsCell.el);
+  var netCell = el('div', 'sim-summary-cell');
+  netCell.appendChild(el('div', 'sim-summary-label', 'Net change to profit (this period)'));
+  var netRow = el('div', 'sim-summary-row');
+  var netSpan = el('span', 'sim-summary-new', '—');
+  netRow.appendChild(netSpan);
+  netCell.appendChild(netRow);
+  grid.appendChild(netCell);
+  var monthCell = el('div', 'sim-summary-cell');
+  monthCell.appendChild(el('div', 'sim-summary-label', 'Extrapolated to a typical month'));
+  var monthRow = el('div', 'sim-summary-row');
+  var monthSpan = el('span', 'sim-summary-new', '—');
+  monthRow.appendChild(monthSpan);
+  monthCell.appendChild(monthRow);
+  grid.appendChild(monthCell);
+  summary.appendChild(grid);
+  var hintLine = el('div', 'recon-inst' + (anyOverride ? ' sim-hidden' : ''), 'Nothing simulated yet - change a "Proposed cost" or "Proposed sell" below to see the impact.');
+  summary.appendChild(hintLine);
+  root.appendChild(summary);
+
+  /* ---- Menu engineering quadrant ---- */
+  var qCard = el('div', 'recon-card fade-in');
+  qCard.appendChild(el('div', 'recon-metric', 'Menu mix: Snail / Staple / Hidden Gem / Hero'));
+  var qInst = el('div', 'recon-inst');
+  qCard.appendChild(qInst);
+  var qGrid = el('div', 'sim-quadrant');
+  var QUAD_BOXES = [
+    { key: 'hero', label: 'Hero', cls: 'sim-q-hero' },
+    { key: 'staple', label: 'Staple', cls: 'sim-q-staple' },
+    { key: 'hiddenGem', label: 'Hidden Gem', cls: 'sim-q-gem' },
+    { key: 'snail', label: 'Snail', cls: 'sim-q-snail' },
+  ];
+  var qBoxRefs = {};
+  QUAD_BOXES.forEach(function (box) {
+    var b = el('div', 'sim-q-box ' + box.cls);
+    var title = el('div', 'sim-q-title', box.label);
+    var items = el('div', 'sim-q-items', '—');
+    b.appendChild(title); b.appendChild(items);
+    qGrid.appendChild(b);
+    qBoxRefs[box.key] = { title: title, items: items, label: box.label };
+  });
+  qCard.appendChild(qGrid);
+  root.appendChild(qCard);
+
+  /* ---- Per-item what-if table ---- */
+  var tableCard = el('div', 'recon-card fade-in');
+  tableCard.appendChild(el('div', 'recon-metric', 'Try a change, item by item'));
+  tableCard.appendChild(el('div', 'recon-inst', 'Sorted by revenue. Edit "Proposed cost" (e.g. a smaller patty, a cheaper bun) or "Proposed sell" and watch GP% and profit impact update - nothing here touches the real recipe or menu price.'));
+  var table = el('div', 'cost-table sim-table');
+  var thead = el('div', 'cost-row cost-row-head');
+  thead.appendChild(el('span', 'cost-col-name', 'Item'));
+  thead.appendChild(el('span', 'cost-col-num', 'Qty sold'));
+  thead.appendChild(el('span', 'cost-col-num', 'Current GP%'));
+  thead.appendChild(el('span', 'cost-col-num', 'Proposed cost'));
+  thead.appendChild(el('span', 'cost-col-num', 'Proposed sell'));
+  thead.appendChild(el('span', 'cost-col-num', 'Proposed GP%'));
+  thead.appendChild(el('span', 'cost-col-num', 'Profit impact'));
+  table.appendChild(thead);
+
+  rows.forEach(function (r) {
+    var row = el('div', 'cost-row');
+    row.appendChild(el('span', 'cost-col-name', esc(r.display)));
+    row.appendChild(el('span', 'cost-col-num', r.qty % 1 === 0 ? String(r.qty) : r.qty.toFixed(1)));
+    var curGpCell = el('span', 'cost-col-num');
+    curGpCell.textContent = r.currentGP != null ? r.currentGP.toFixed(1) + '%' : '—';
+    row.appendChild(curGpCell);
+
+    var costCell = el('span', 'cost-col-num');
+    var costInp = el('input', 'cost-inp');
+    costInp.type = 'number'; costInp.step = '0.01';
+    costInp.value = r.proposedCost.toFixed(2);
+    costInp.oninput = (function (key) { return function () {
+      costingState.simOverrides[key] = costingState.simOverrides[key] || {};
+      costingState.simOverrides[key].cost = this.value;
+      recompute();
+    }; })(r.key);
+    costCell.appendChild(costInp);
+    row.appendChild(costCell);
+
+    var sellCell = el('span', 'cost-col-num');
+    var sellInp = el('input', 'cost-inp');
+    sellInp.type = 'number'; sellInp.step = '0.01';
+    sellInp.value = r.proposedSell != null ? r.proposedSell.toFixed(2) : '';
+    sellInp.oninput = (function (key) { return function () {
+      costingState.simOverrides[key] = costingState.simOverrides[key] || {};
+      costingState.simOverrides[key].sell = this.value;
+      recompute();
+    }; })(r.key);
+    sellCell.appendChild(sellInp);
+    row.appendChild(sellCell);
+
+    var propGpCell = el('span', 'cost-col-num');
+    row.appendChild(propGpCell);
+
+    var impactCell = el('span', 'cost-col-num');
+    row.appendChild(impactCell);
+
+    table.appendChild(row);
+    rowRefs.push({ r: r, rowEl: row, propGpCell: propGpCell, impactCell: impactCell });
+  });
+  tableCard.appendChild(table);
+  root.appendChild(tableCard);
+
+  /* Recomputes every derived number (rows, rollup, quadrant) straight from
+     costingState.simOverrides and patches text/classes in place - never
+     rebuilds the input elements, so typing a multi-digit price doesn't lose
+     focus or cursor position (the exact bug class fixed elsewhere in this
+     app for the Settings screen). Called on every keystroke; render() (full
+     rebuild) only happens on structural actions like the period buttons or
+     Reset. */
+  function recompute() {
+    rows.forEach(function (r) {
+      r.proposedCost = simOverrideNum(r.key, 'cost', r.currentCost);
+      r.proposedSell = simOverrideNum(r.key, 'sell', r.currentSell);
+      r.proposedGP = (r.proposedSell != null && r.proposedSell > 0) ? ((r.proposedSell - r.proposedCost) / r.proposedSell * 100) : null;
+      var curProfitUnit = (r.currentSell != null) ? (r.currentSell - r.currentCost) : null;
+      var propProfitUnit = (r.proposedSell != null) ? (r.proposedSell - r.proposedCost) : null;
+      r.profitImpact = (curProfitUnit != null && propProfitUnit != null) ? (propProfitUnit - curProfitUnit) * r.qty : null;
+      r.hasOverride = simHasOverride(r.key);
+    });
+    var anyOv = rows.some(function (r) { return r.hasOverride; });
+    resetBtn.classList.toggle('sim-hidden', !anyOv);
+    hintLine.classList.toggle('sim-hidden', anyOv);
+
+    rowRefs.forEach(function (ref) {
+      var r = ref.r;
+      ref.rowEl.className = 'cost-row' + (r.hasOverride ? ' sim-row-changed' : '');
+      ref.propGpCell.textContent = r.proposedGP != null ? r.proposedGP.toFixed(1) + '%' : '—';
+      ref.propGpCell.className = 'cost-col-num' + (r.hasOverride ? ' sim-changed' : '');
+      ref.impactCell.textContent = r.profitImpact != null ? ((r.profitImpact >= 0 ? '+' : '') + fmtMoney(r.profitImpact, true)) : '—';
+      ref.impactCell.className = 'cost-col-num' + (r.hasOverride ? (r.profitImpact >= 0 ? ' sim-up' : ' sim-down') : '');
+    });
+
+    var rollup = simRollup(rows);
+    function setMetric(cell, oldVal, newVal) {
+      cell.oldSpan.textContent = oldVal != null ? (cell.isPct ? oldVal.toFixed(1) + '%' : fmtMoney(oldVal, true)) : '—';
+      var changed = anyOv && oldVal != null && newVal != null && Math.abs(oldVal - newVal) > 0.005;
+      cell.newSpan.textContent = newVal != null ? (cell.isPct ? newVal.toFixed(1) + '%' : fmtMoney(newVal, true)) : '—';
+      cell.newSpan.className = 'sim-summary-new' + (changed ? ' sim-changed' : '');
+    }
+    setMetric(gpCell, rollup.oldGP, rollup.newGP);
+    setMetric(cogsCell, rollup.oldCogs, rollup.newCogs);
+    netSpan.textContent = (rollup.netChange >= 0 ? '+' : '') + fmtMoney(rollup.netChange, true);
+    netSpan.className = 'sim-summary-new' + (Math.abs(rollup.netChange) > 0.005 ? ' ' + (rollup.netChange >= 0 ? 'sim-up' : 'sim-down') : '');
+    var monthly = costingState.salesData.days ? (rollup.netChange / costingState.salesData.days * 30) : null;
+    monthSpan.textContent = monthly != null ? ((monthly >= 0 ? '+' : '') + fmtMoney(monthly, true)) : '—';
+    monthSpan.className = 'sim-summary-new' + (monthly != null && Math.abs(monthly) > 0.005 ? ' ' + (monthly >= 0 ? 'sim-up' : 'sim-down') : '');
+
+    var quad = buildQuadrant(rows);
+    qInst.innerHTML = quad
+      ? 'Popularity vs profitability, each split at this group’s own average (avg popularity ' + quad.avgPop.toFixed(1) + '%, avg GP% ' + quad.avgGP.toFixed(1) + '%) - not fixed numbers, so the split moves as your sales mix does. '
+        + '<b>Hero</b> = sells well and profitable, protect it. <b>Staple</b> = sells well but thin margin, look for a small price or cost win. <b>Hidden Gem</b> = very profitable but under-ordered, worth promoting. <b>Snail</b> = neither - candidate to cut, reprice, or rework.'
+        + (anyOv ? ' Reflects your simulated changes above.' : '')
+      : '';
+    QUAD_BOXES.forEach(function (box) {
+      var list = quad ? quad.boxes[box.key] : [];
+      var ref = qBoxRefs[box.key];
+      ref.title.textContent = ref.label + ' (' + list.length + ')';
+      var names = list.slice().sort(function (a, b) { return b.revenue - a.revenue; }).slice(0, 10).map(function (r) { return r.display; }).join(', ');
+      ref.items.textContent = names || '—';
+      if (list.length > 10) ref.items.textContent += ' + ' + (list.length - 10) + ' more';
+    });
+  }
+
+  recompute();
 }
 
 function renderCosting(root) {
