@@ -285,6 +285,19 @@ body {
 .cost-edit-flabel { white-space: nowrap; }
 .cost-row-batch input.cost-inp-wide { margin-right: 8px; }
 .cost-row-batch input.cost-inp { margin-right: 8px; }
+/* A menu-item row you can click to open its editor in place. */
+.cost-row-click { cursor: pointer; }
+.cost-row-click:hover { background: var(--cream2); border-radius: 8px; }
+.cost-row-open { background: var(--cream2); border-radius: 8px 8px 0 0; }
+.cost-row-open .cost-col-name { font-weight: 600; }
+/* Collapsible section inside a tab (Menu simulator, Square match editor). */
+.cost-details { background: var(--white); border: 1px solid var(--border); border-radius: 14px; padding: 0.6rem 1.2rem 1rem; margin-top: 12px; }
+.cost-details[open] { padding-bottom: 1.2rem; }
+.cost-summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--black); padding: 0.5rem 0; list-style-position: outside; }
+.cost-summary:hover { color: var(--accent); }
+.cost-details .cost-details { border: none; padding-left: 0; padding-right: 0; background: none; }
+/* The "your COGS moved" card - same amber as the top-of-page banners. */
+.banner-amber-card { background: var(--c-amber-bg); border-color: var(--c-amber-border); }
 
 /* Settings */
 .set-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; max-width: 760px; }
@@ -527,6 +540,19 @@ function saveOverrides() { try { localStorage.setItem('vd_overrides', JSON.strin
    ADDED ON TOP of the live Square count rather than replacing it. */
 var UBER = loadJson('vd_uber', {});
 function saveUber() { try { localStorage.setItem('vd_uber', JSON.stringify(UBER)); } catch (e) {} queueAppStateSync(); }
+/* Square-sold item name -> recipe key (or '__ignore__' for "reviewed, not a
+   real menu item"), set from the Recipe costing tab's match-fixing editor -
+   see buildSalesMix(). Lets a naming mismatch between Square and a recipe
+   be fixed from the dashboard instead of needing a code change + redeploy. */
+var SALES_ALIASES = loadJson('vd_salesaliases', {});
+function saveSalesAliases() { try { localStorage.setItem('vd_salesaliases', JSON.stringify(SALES_ALIASES)); } catch (e) {} queueAppStateSync(); }
+/* Ingredient key -> the price the dashboard last showed Kane (from the
+   weekly supplier price check), so a COGS-moved flag fires once per real
+   change rather than every reload - see maybeFlagPriceChanges(). */
+var PRICE_SEEN = loadJson('vd_priceseen', {});
+function savePriceSeen() { try { localStorage.setItem('vd_priceseen', JSON.stringify(PRICE_SEEN)); } catch (e) {} queueAppStateSync(); }
+var priceSeenReceived = false;   /* true once we know what the server's priceSeen actually is (even if empty) */
+var priceSeenBaselined = false;  /* true once we've either compared against a real baseline or established one */
 
 /* ---------- Server sync for everything above ----------
    Settings/Recon/Org-ok/Manual entries/Overrides/Uber used to live ONLY in
@@ -551,7 +577,7 @@ function pushAppState() {
   appStateSyncing = true;
   fetch('/api/state', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ settings: SETTINGS, recon: RECON, orgOk: ORG_OK, manual: MANUAL, overrides: OVERRIDES, uber: UBER })
+    body: JSON.stringify({ settings: SETTINGS, recon: RECON, orgOk: ORG_OK, manual: MANUAL, overrides: OVERRIDES, uber: UBER, salesAliases: SALES_ALIASES, priceSeen: PRICE_SEEN })
   }).then(function (res) {
     appStateSyncing = false;
     if (!res.ok) throw new Error('save failed');
@@ -572,7 +598,15 @@ function fetchAppState() {
   fetch('/api/state').then(function (res) {
     return res.ok ? res.json() : null;
   }).then(function (payload) {
-    if (!payload || !payload.data) return;
+    if (!payload || !payload.data) {
+      /* A real response with nothing saved yet (vs. a network failure,
+         handled in .catch below) still means we now KNOW there's no
+         priceSeen baseline on the server - safe to let maybeFlagPriceChanges
+         establish one from scratch instead of waiting forever. */
+      priceSeenReceived = true;
+      maybeFlagPriceChanges();
+      return;
+    }
     var d = payload.data;
     if (d.settings && Object.keys(d.settings).length) {
       var ds = defaultSettings();
@@ -586,6 +620,10 @@ function fetchAppState() {
     if (d.manual) { MANUAL = d.manual; try { localStorage.setItem('vd_manual', JSON.stringify(MANUAL)); } catch (e) {} }
     if (d.overrides) { OVERRIDES = d.overrides; try { localStorage.setItem('vd_overrides', JSON.stringify(OVERRIDES)); } catch (e) {} }
     if (d.uber) { UBER = d.uber; try { localStorage.setItem('vd_uber', JSON.stringify(UBER)); } catch (e) {} }
+    if (d.salesAliases) { SALES_ALIASES = d.salesAliases; try { localStorage.setItem('vd_salesaliases', JSON.stringify(SALES_ALIASES)); } catch (e) {} }
+    if (d.priceSeen) { PRICE_SEEN = d.priceSeen; try { localStorage.setItem('vd_priceseen', JSON.stringify(PRICE_SEEN)); } catch (e) {} }
+    priceSeenReceived = true;
+    maybeFlagPriceChanges();
     render();
     fetchData();
   }).catch(function () { /* stay on whatever localStorage already gave us above */ });
@@ -1252,7 +1290,10 @@ function fetchRecipes() {
       recipeDataState.updatedAt = payload.updatedAt;
     }
     recipeDataState.loaded = true;
-    if (state.view === 'costing') render();
+    /* See fetchIngredientPrices() - price-change flagging can't run until
+       the recipes it has to re-cost are the real, saved ones. */
+    maybeFlagPriceChanges();
+    if (state.view === 'costing' || state.view === 'ingredients') render();
   }).catch(function () { recipeDataState.loaded = true; });
 }
 
@@ -1324,6 +1365,11 @@ function saveRecipeData(onDone) {
       if (!r.ok) { onDone([r.body && r.body.plain ? r.body.plain : 'Save failed.']); return; }
       recipeDataState.source = 'server';
       recipeDataState.updatedAt = r.body.updatedAt;
+      /* Anything saved is now the baseline "Discard changes" on the
+         Ingredients tab goes back to - otherwise a save made from the
+         inline item panel would leave that tab holding a snapshot from
+         before it, and Discard would silently undo saved work. */
+      costingState.ingSnapshot = deepClone(RECIPE_DATA.raw);
       onDone([]);
     })
     .catch(function () { onDone(['Save failed - check your connection and try again.']); });
@@ -1382,16 +1428,30 @@ var costingState = {
   overridePrices: {},   /* ingredient name -> { price, note } fetched from /api/ingredient-prices */
   overridesUpdatedAt: null,
   overridesLoaded: false,
-  editActive: false,        /* showing the recipe/ingredient editor instead of the report */
-  editSnapshot: null,       /* deep copy of RECIPE_DATA taken on entering edit mode, for Discard */
-  editProblems: [],         /* validation messages blocking Save, [] when clean */
-  editSaving: false,
-  editSavedAt: null,        /* set briefly after a successful save, for the confirmation banner */
-  editNewItemName: '',      /* live value of the "add new menu item" name field */
-  editNewIngName: '',       /* live value of the "add new raw ingredient" name field */
+  priceChangeFlags: [], /* [{key,display,oldPct,newPct}] - items whose COGS% moved since PRICE_SEEN, see maybeFlagPriceChanges() */
+
+  /* Ingredient library ("Ingredients" tab) - its own small edit surface,
+     separate from menu-item editing below since Kane wants ingredient
+     prices to come from the weekly supplier check and this tab touched only
+     for a one-off correction or a brand new ingredient, never routine use. */
+  ingSnapshot: null,     /* deep copy of RECIPE_DATA.raw taken on entering the tab, for Discard */
+  ingProblems: [],
+  ingSaving: false,
+  ingSavedAt: null,
+  ingNewName: '',
+
+  /* Menu item editing: click an item in "Every menu item" to open it inline
+     right there (ingredients/portions/sell price) - no separate mode/tab. */
+  openItemKey: null,        /* recipe key whose inline panel is open, or null */
+  itemEditSnapshot: null,   /* deep copy of just that one recipe, for Cancel */
+  itemProblems: [],
+  itemSaving: false,
+  itemNewName: '',          /* live value of the "add new menu item" name field */
+
   salesLoaded: false,       /* whether the first /api/recipe-sales fetch has returned */
   salesData: null,          /* raw {from,to,days,byItem,connected} from /api/recipe-sales */
   salesPeriodDays: 84,      /* 12 weeks default - selector in the UI switches this */
+  salesMonth: null,         /* 'YYYY-MM' when a specific calendar month is picked instead - overrides salesPeriodDays */
   salesError: null,
   simOverrides: {},         /* itemKey -> { cost: '<raw input string>'|null, sell: '<raw input string>'|null } - the Menu simulator's what-if layer. Never touches RECIPE_DATA - purely a scenario on top of it, so trying "what if I dropped the price 50c" never risks the real recipe/menu data. null/'' means "use current". */
 };
@@ -1399,54 +1459,127 @@ var costingState = {
 /* Real Square sales, matched to recipes, for the "what actually sells" view
    below the theoretical report - see the big comment on squareItemSalesSync
    in worker.js for why this is a separate, approved capability. */
+/* 'YYYY-MM' -> { from: 'YYYY-MM-01', to: 'YYYY-MM-<last day>' }. Uses UTC day
+   arithmetic (day 0 of the NEXT month = last day of this one) so a month
+   never comes up a day short across a daylight-saving boundary. */
+function salesMonthRange(mk) {
+  var parts = String(mk).split('-');
+  var y = Number(parts[0]), m = Number(parts[1]);
+  if (!isFinite(y) || !isFinite(m) || m < 1 || m > 12) return null;
+  var last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  var mm = (m < 10 ? '0' : '') + m;
+  return { from: y + '-' + mm + '-01', to: y + '-' + mm + '-' + (last < 10 ? '0' : '') + last };
+}
+/* The last `n` calendar months as [{ key:'YYYY-MM', label:'Aug 2026' }],
+   newest first, for the month picker in the sales-mix card. */
+function recentSalesMonths(n) {
+  var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var now = new Date();
+  var y = now.getFullYear(), m = now.getMonth(); /* 0-based */
+  var out = [];
+  for (var i = 0; i < n; i++) {
+    var yy = y, mm = m - i;
+    while (mm < 0) { mm += 12; yy -= 1; }
+    out.push({ key: yy + '-' + (mm + 1 < 10 ? '0' : '') + (mm + 1), label: MON[mm] + ' ' + yy });
+  }
+  return out;
+}
+
 function fetchItemSales() {
-  var url = '/api/recipe-sales?days=' + costingState.salesPeriodDays;
+  /* A picked calendar month wins over the trailing-days buttons: the backend
+     takes either an explicit from/to or a days span, so this just builds
+     whichever the current selection implies. */
+  var url;
+  var mr = costingState.salesMonth ? salesMonthRange(costingState.salesMonth) : null;
+  if (mr) url = '/api/recipe-sales?from=' + mr.from + '&to=' + mr.to;
+  else url = '/api/recipe-sales?days=' + costingState.salesPeriodDays;
   fetch(url).then(function (res) {
     return res.ok ? res.json() : Promise.reject(new Error('http ' + res.status));
   }).then(function (data) {
     costingState.salesData = data;
     costingState.salesError = null;
     costingState.salesLoaded = true;
-    if (state.view === 'costing') render();
+    if (state.view === 'costing' || state.view === 'ingredients') render();
   }).catch(function (e) {
     costingState.salesError = 'Couldn’t load Square sales data.';
     costingState.salesLoaded = true;
-    if (state.view === 'costing') render();
+    if (state.view === 'costing' || state.view === 'ingredients') render();
   });
 }
 
-/* Matches each Square line-item name (lowercased, trimmed) to a recipe key
-   by exact match only for now - anything that doesn't match is surfaced in
-   "unmatched" rather than silently dropped, since a naming mismatch (Square
-   calling it "Classic Daddy Burger" vs the recipe key "classic daddy") would
-   otherwise quietly understate real sales-mix coverage. */
+/* Resolves ONE Square line-item key to a recipe key, in this order:
+     1. a hand-set alias from the "match Square sales to menu items" editor
+        (SALES_ALIASES) - including the literal '__ignore__', meaning Kane
+        has reviewed it and it isn't a real menu item (a tip, a bag charge,
+        a deleted special) so it should be left out of the numbers entirely
+        rather than nagged about forever as "not matched";
+     2. failing that, an exact key match against the report's own items.
+   Returns null for "no idea", '__ignore__' for a deliberate suppression. */
+function resolveSquareKey(sqKey, itemsByKey) {
+  var alias = SALES_ALIASES[sqKey];
+  if (alias === '__ignore__') return '__ignore__';
+  if (alias && itemsByKey[alias]) return alias;
+  if (itemsByKey[sqKey]) return sqKey;
+  return null;
+}
+
+/* Matches each Square line-item name (lowercased, trimmed) to a recipe,
+   via SALES_ALIASES first and an exact key match second - see
+   resolveSquareKey(). Anything still unresolved is surfaced in "unmatched"
+   rather than silently dropped, since a naming mismatch (Square calling it
+   "Classic Daddy Burger" vs the recipe key "classic daddy") would otherwise
+   quietly understate real sales-mix coverage. Several Square names can point
+   at the same recipe (an old and a new till name for the same burger), so
+   matched rows are aggregated per RECIPE key, not per Square name. */
 function buildSalesMix(report) {
   var sd = costingState.salesData;
   if (!sd || !sd.byItem) return null;
   var itemsByKey = {};
   report.items.forEach(function (it) { itemsByKey[it.key] = it; });
 
+  var byRecipe = {};
   var matched = [];
   var unmatched = [];
   var totalQty = 0, totalRevenue = 0, totalFoodCost = 0;
   var matchedRevenue = 0;
+  var ignoredQty = 0, ignoredRevenue = 0, ignoredCount = 0;
 
   Object.keys(sd.byItem).forEach(function (sqKey) {
     var row = sd.byItem[sqKey];
+    var resolved = resolveSquareKey(sqKey, itemsByKey);
+    if (resolved === '__ignore__') {
+      /* Deliberately excluded from the totals too, not just from the matched
+         list - counting it in totalRevenue would make matched-revenue
+         coverage look permanently incomplete for something Kane has already
+         said isn't a menu item. */
+      ignoredQty += row.qty; ignoredRevenue += row.gross; ignoredCount++;
+      return;
+    }
     totalRevenue += row.gross;
-    var it = itemsByKey[sqKey];
-    if (!it) { unmatched.push({ name: row.name, qty: row.qty, revenue: row.gross }); return; }
+    var it = resolved ? itemsByKey[resolved] : null;
+    /* sqKey carried through so the alias editor can point straight at the
+       Square row that needs fixing, not just its display name. */
+    if (!it) { unmatched.push({ sqKey: sqKey, name: row.name, qty: row.qty, revenue: row.gross }); return; }
     var foodCost = it.cost * row.qty;
     totalQty += row.qty;
     totalFoodCost += foodCost;
     matchedRevenue += row.gross;
-    matched.push({
-      key: it.key, display: it.display, qty: row.qty, revenue: row.gross,
-      foodCost: foodCost, itemPct: row.gross > 0 ? (foodCost / row.gross * 100) : null,
-    });
+    var agg = byRecipe[it.key];
+    if (!agg) {
+      agg = { key: it.key, display: it.display, qty: 0, revenue: 0, foodCost: 0, sqKeys: [] };
+      byRecipe[it.key] = agg;
+      matched.push(agg);
+    }
+    agg.qty += row.qty;
+    agg.revenue += row.gross;
+    agg.foodCost += foodCost;
+    agg.sqKeys.push(sqKey);
   });
 
-  matched.forEach(function (m) { m.popularityPct = totalQty > 0 ? (m.qty / totalQty * 100) : 0; });
+  matched.forEach(function (m) {
+    m.itemPct = m.revenue > 0 ? (m.foodCost / m.revenue * 100) : null;
+    m.popularityPct = totalQty > 0 ? (m.qty / totalQty * 100) : 0;
+  });
   matched.sort(function (a, b) { return b.revenue - a.revenue; });
   unmatched.sort(function (a, b) { return b.qty - a.qty; });
 
@@ -1455,9 +1588,46 @@ function buildSalesMix(report) {
     matched: matched, unmatched: unmatched,
     totalQty: totalQty, totalRevenue: totalRevenue, matchedRevenue: matchedRevenue,
     totalFoodCost: totalFoodCost,
+    ignoredCount: ignoredCount, ignoredQty: ignoredQty, ignoredRevenue: ignoredRevenue,
     actualCogsPct: matchedRevenue > 0 ? (totalFoodCost / matchedRevenue * 100) : null,
     matchedRevenueSharePct: totalRevenue > 0 ? (matchedRevenue / totalRevenue * 100) : null,
   };
+}
+
+/* EVERY Square-sold item in the period, matched or not, for the alias
+   editor - deliberately not just the unmatched ones, so a wrong match (the
+   till name that happens to collide with the wrong recipe key, or an alias
+   set by mistake) can be seen and corrected too, not only a missing one.
+   Sorted unresolved-first (the rows that actually need a decision) then by
+   how much of it sold. */
+function allSquareRows(report) {
+  var sd = costingState.salesData;
+  if (!sd || !sd.byItem) return [];
+  var itemsByKey = {};
+  report.items.forEach(function (it) { itemsByKey[it.key] = it; });
+  var rows = Object.keys(sd.byItem).map(function (sqKey) {
+    var row = sd.byItem[sqKey];
+    var alias = SALES_ALIASES[sqKey];
+    var resolved = resolveSquareKey(sqKey, itemsByKey);
+    var status;
+    if (resolved === '__ignore__') status = 'ignored';
+    else if (!resolved) status = 'unresolved';
+    else if (alias) status = 'alias';
+    else status = 'exact';
+    return {
+      sqKey: sqKey, name: row.name, qty: row.qty, revenue: row.gross,
+      alias: (alias != null ? alias : null),
+      resolvedKey: (resolved && resolved !== '__ignore__') ? resolved : null,
+      resolvedDisplay: (resolved && resolved !== '__ignore__' && itemsByKey[resolved]) ? itemsByKey[resolved].display : null,
+      status: status,
+    };
+  });
+  rows.sort(function (a, b) {
+    var au = a.status === 'unresolved' ? 0 : 1, bu = b.status === 'unresolved' ? 0 : 1;
+    if (au !== bu) return au - bu;
+    return b.qty - a.qty;
+  });
+  return rows;
 }
 
 function fetchIngredientPrices() {
@@ -1469,7 +1639,11 @@ function fetchIngredientPrices() {
       costingState.overridesUpdatedAt = data.updatedAt || null;
     }
     costingState.overridesLoaded = true;
-    if (state.view === 'costing') render();
+    /* Flagging needs prices + recipes + the server's priceSeen baseline, and
+       they land in whatever order the network gives them - so every one of
+       the three calls this, and it no-ops until the other two have arrived. */
+    maybeFlagPriceChanges();
+    if (state.view === 'costing' || state.view === 'ingredients') render();
   }).catch(function () { costingState.overridesLoaded = true; });
 }
 
@@ -1611,6 +1785,85 @@ function buildCostingReport() {
   };
 }
 
+/* ---------- "Your COGS moved" flagging ----------
+   Ingredient prices can change under Kane's feet - a correction typed on
+   the Ingredients tab from his phone, or (once the weekly supplier price
+   check is wired to post into /api/ingredient-prices, which it is NOT yet)
+   a supplier update landing on its own - which
+   means a menu item's theoretical COGS% can quietly move between one time
+   Kane looks at this tab and the next, with nothing telling him it
+   happened or why. PRICE_SEEN is a snapshot of the prices as of the last
+   time he saw them (synced via appstate, so it follows him across
+   devices); whenever the freshly-fetched prices differ from that snapshot,
+   this recomputes every affected item's COGS% with the OLD price vs the
+   NEW price (by temporarily swapping costingState.overridePrices, so it
+   reuses the exact same cost engine as the real report - no separate/
+   duplicated cost maths to drift out of sync) and flags anything that
+   moved by half a point or more. Acknowledging clears the flags and moves
+   the snapshot forward so the same change never re-flags. */
+function computeIngredientPriceFlags(oldPrices) {
+  var changed = {};
+  Object.keys(costingState.overridePrices).forEach(function (k) {
+    var ov = costingState.overridePrices[k];
+    var newP = ov && typeof ov.price === 'number' ? ov.price : null;
+    var oldP = oldPrices[k];
+    if (newP != null && typeof oldP === 'number' && Math.abs(newP - oldP) > 0.0001) changed[k] = true;
+  });
+  if (!Object.keys(changed).length) return [];
+
+  var liveOverrides = costingState.overridePrices;
+  var pastOverrides = {};
+  Object.keys(liveOverrides).forEach(function (k) { pastOverrides[k] = liveOverrides[k]; });
+  Object.keys(changed).forEach(function (k) {
+    pastOverrides[k] = Object.assign({}, liveOverrides[k] || {}, { price: oldPrices[k] });
+  });
+
+  costingState.overridePrices = pastOverrides;
+  var beforeReport = buildCostingReport();
+  costingState.overridePrices = liveOverrides;
+  var afterReport = buildCostingReport();
+
+  var beforeByKey = {};
+  beforeReport.items.forEach(function (it) { beforeByKey[it.key] = it; });
+  var flags = [];
+  afterReport.items.forEach(function (it) {
+    if (!it.inRollup) return;
+    var was = beforeByKey[it.key];
+    if (!was || it.pct == null || was.pct == null) return;
+    if (Math.abs(it.pct - was.pct) >= 0.5) {
+      flags.push({ key: it.key, display: it.display, oldPct: was.pct, newPct: it.pct });
+    }
+  });
+  flags.sort(function (a, b) { return Math.abs(b.newPct - b.oldPct) - Math.abs(a.newPct - a.oldPct); });
+  return flags;
+}
+function maybeFlagPriceChanges() {
+  if (!costingState.overridesLoaded || !priceSeenReceived || !recipeDataState.loaded) return;
+  if (!priceSeenBaselined) {
+    if (!Object.keys(PRICE_SEEN).length) {
+      /* First time this feature has ever run for this account - nothing
+         to meaningfully compare against yet, so just capture today's
+         prices as the starting point rather than flagging everything. */
+      Object.keys(costingState.overridePrices).forEach(function (k) {
+        var ov = costingState.overridePrices[k];
+        if (ov && typeof ov.price === 'number') PRICE_SEEN[k] = ov.price;
+      });
+      savePriceSeen();
+    }
+    priceSeenBaselined = true;
+  }
+  costingState.priceChangeFlags = computeIngredientPriceFlags(PRICE_SEEN);
+}
+function acknowledgePriceFlags() {
+  Object.keys(costingState.overridePrices).forEach(function (k) {
+    var ov = costingState.overridePrices[k];
+    if (ov && typeof ov.price === 'number') PRICE_SEEN[k] = ov.price;
+  });
+  costingState.priceChangeFlags = [];
+  savePriceSeen();
+  render();
+}
+
 /* ============================================================
    Rendering
 ============================================================ */
@@ -1660,8 +1913,8 @@ function render() {
   /* Nav */
   var nav = el('div', 'nav');
   var tabs = isManual()
-    ? [ { key: 'dashboard', label: 'Dashboard' }, { key: 'manager', label: 'Manager view' }, { key: 'costing', label: 'Recipe costing' }, { key: 'simulator', label: 'Menu simulator' }, { key: 'enter', label: 'Enter numbers' }, { key: 'settings', label: 'Settings' } ]
-    : [ { key: 'dashboard', label: 'Dashboard' }, { key: 'manager', label: 'Manager view' }, { key: 'costing', label: 'Recipe costing' }, { key: 'simulator', label: 'Menu simulator' }, { key: 'connections', label: 'Connections' }, { key: 'recon', label: 'Check your numbers' }, { key: 'settings', label: 'Settings' } ];
+    ? [ { key: 'dashboard', label: 'Dashboard' }, { key: 'manager', label: 'Manager view' }, { key: 'costing', label: 'Recipe costing' }, { key: 'ingredients', label: 'Ingredients' }, { key: 'enter', label: 'Enter numbers' }, { key: 'settings', label: 'Settings' } ]
+    : [ { key: 'dashboard', label: 'Dashboard' }, { key: 'manager', label: 'Manager view' }, { key: 'costing', label: 'Recipe costing' }, { key: 'ingredients', label: 'Ingredients' }, { key: 'connections', label: 'Connections' }, { key: 'recon', label: 'Check your numbers' }, { key: 'settings', label: 'Settings' } ];
   tabs.forEach(function (t) {
     var b = el('button', 'nav-tab' + (state.view === t.key ? ' active' : ''));
     b.innerHTML = t.label + ((t.key === 'recon' && anyConfiguredSource() && unconfirmedConnectedMetrics().length) ? '<span class="dot"></span>' : '');
@@ -1695,10 +1948,14 @@ function render() {
   }
 
   if (isManual() && (state.view === 'connections' || state.view === 'recon')) state.view = 'dashboard';
+  /* The Menu simulator is no longer its own tab - it lives inside Recipe
+     costing now. Anything still pointing at the old view (a bookmark, a
+     stale state) lands on the tab that contains it rather than nowhere. */
+  if (state.view === 'simulator') state.view = 'costing';
   if (state.view === 'dashboard') renderDashboard(root);
   else if (state.view === 'manager') renderManager(root);
   else if (state.view === 'costing') renderCosting(root);
-  else if (state.view === 'simulator') renderSimulator(root);
+  else if (state.view === 'ingredients') renderIngredients(root);
   else if (state.view === 'enter') renderManualEntry(root);
   else if (state.view === 'connections') renderConnections(root);
   else if (state.view === 'recon') renderRecon(root);
@@ -2732,46 +2989,66 @@ function costingLineKindTag(recipeKey, ingredientName) {
   return '<span class="cost-tag cost-tag-bad">not found</span>';
 }
 
-function renderCostingEditor(root) {
+/* ---------- Ingredients tab ----------
+   The raw ingredient library on its own top-level tab, replacing the old
+   all-in-one "Edit recipes & ingredients" mode. Split out deliberately:
+   ingredient prices and pack sizes are supplier facts Kane changes rarely
+   (a one-off correction, or a brand new ingredient), whereas what goes
+   INTO a dish is something he wants to fiddle with while looking at that
+   dish's COGS% - so that half now lives inline in the Recipe costing
+   table instead. Both halves still write the one /api/recipes document. */
+function renderIngredients(root) {
+  /* Snapshot on first paint of the tab, so "Discard" can put every price and
+     pack size back exactly as they were even after a dozen small edits. */
+  if (!costingState.ingSnapshot) costingState.ingSnapshot = deepClone(RECIPE_DATA.raw);
+
+  root.appendChild(el('div', 'screen-title', 'Ingredients'));
   root.appendChild(el('p', 'screen-sub',
-    'Add, resize or remove ingredients and menu items - the cost and COGS% figures recalculate the moment you save. Renaming an existing item isn’t supported yet; delete it and add it again under the new name instead.'));
+    'Every raw ingredient your recipes can use, with the pack size and pack price each one is costed at. '
+    + 'Change something here and every menu item using it re-costs the moment you save. '
+    + 'Renaming an existing ingredient isn’t supported yet - delete it and add it again under the new name instead.'));
 
   /* ---- Save / discard bar ---- */
   var bar = el('div', 'recon-card fade-in');
   var barRow = el('div', 'conn-actions');
-  var saveBtn = el('button', 'btn-small', costingState.editSaving ? 'Saving…' : 'Save changes');
-  saveBtn.disabled = costingState.editSaving;
+  var saveBtn = el('button', 'btn-small', costingState.ingSaving ? 'Saving…' : 'Save changes');
+  saveBtn.disabled = costingState.ingSaving;
   saveBtn.onclick = function () {
-    costingState.editSaving = true; render();
+    costingState.ingSaving = true; render();
     saveRecipeData(function (problems) {
-      costingState.editSaving = false;
-      costingState.editProblems = problems;
-      if (!problems.length) { costingState.editSavedAt = Date.now(); costingState.editActive = false; }
+      costingState.ingSaving = false;
+      costingState.ingProblems = problems;
+      if (!problems.length) {
+        costingState.ingSavedAt = Date.now();
+        costingState.ingSnapshot = deepClone(RECIPE_DATA.raw); /* new baseline for a later Discard */
+      }
       render();
     });
   };
   var discardBtn = el('button', 'btn-plain', 'Discard changes');
   discardBtn.onclick = function () {
-    RECIPE_DATA = costingState.editSnapshot;
-    costingState.editActive = false;
-    costingState.editProblems = [];
+    RECIPE_DATA.raw = costingState.ingSnapshot;
+    costingState.ingSnapshot = null;
+    costingState.ingProblems = [];
     render();
   };
   barRow.appendChild(saveBtn); barRow.appendChild(discardBtn);
   bar.appendChild(barRow);
-  if (costingState.editProblems.length) {
+  if (costingState.ingProblems.length) {
     var probBox = el('div', 'diag');
     probBox.innerHTML = '<b>Fix these before saving:</b><ul style="margin:0.3rem 0 0 1.1rem; padding:0;">'
-      + costingState.editProblems.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('')
+      + costingState.ingProblems.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('')
       + '</ul>';
     bar.appendChild(probBox);
+  } else if (costingState.ingSavedAt) {
+    bar.appendChild(el('div', 'recon-inst', 'Saved. Every menu item using these ingredients has been re-costed.'));
   }
   root.appendChild(bar);
 
   /* ---- Ingredient library ---- */
   var ingCard = el('div', 'recon-card fade-in');
   ingCard.appendChild(el('div', 'recon-metric', 'Ingredient library'));
-  ingCard.appendChild(el('div', 'recon-inst', 'Every raw ingredient recipes can use, with its current size and price. Editing the price here works, but the weekly supplier price check will overwrite it again next update - change prices there for anything permanent; use this for a one-off correction or a brand new ingredient.'));
+  ingCard.appendChild(el('div', 'recon-inst', 'Pack size is what one pack contains (e.g. 5000 g), pack price is what that whole pack costs - the per-gram cost the recipes use is worked out from the two. Prices here are the ones saved for this dashboard; a future weekly supplier price check will be able to update them for you, but for now anything that changes needs typing in here.'));
   var ingTable = el('div', 'cost-table');
   var ingHead = el('div', 'cost-row cost-row-head');
   ingHead.appendChild(el('span', 'cost-col-name', 'Ingredient'));
@@ -2819,108 +3096,25 @@ function renderCostingEditor(root) {
   var addIngRow = el('div', 'conn-actions');
   var newIngInp = document.createElement('input');
   newIngInp.type = 'text'; newIngInp.placeholder = 'New ingredient name'; newIngInp.className = 'cost-inp-wide';
-  newIngInp.value = costingState.editNewIngName;
-  newIngInp.oninput = function () { costingState.editNewIngName = newIngInp.value; };
+  newIngInp.value = costingState.ingNewName;
+  newIngInp.oninput = function () { costingState.ingNewName = newIngInp.value; };
   var addIngBtn = el('button', 'btn-small', '+ Add ingredient');
   addIngBtn.onclick = function () {
-    var err = addRawIngredient(costingState.editNewIngName);
+    var err = addRawIngredient(costingState.ingNewName);
     if (err) { alert(err); return; }
-    costingState.editNewIngName = '';
+    costingState.ingNewName = '';
     render();
   };
   addIngRow.appendChild(newIngInp); addIngRow.appendChild(addIngBtn);
   ingCard.appendChild(addIngRow);
   root.appendChild(ingCard);
 
-  /* ---- Menu items / recipes ---- */
-  var recCard = el('div', 'recon-card fade-in');
-  recCard.appendChild(el('div', 'recon-metric', 'Menu items & recipes'));
-  recCard.appendChild(el('div', 'recon-inst', 'Each ingredient line shows what it resolved to - a plain ingredient, another recipe used as an ingredient (a sauce inside a burger, say), or "not found" if it doesn’t match anything in the library yet.'));
-
-  Object.keys(RECIPE_DATA.recipes).sort().forEach(function (key) {
-    var rec = RECIPE_DATA.recipes[key];
-    var card = el('div', 'cost-edit-item');
-    var itemHead = el('div', 'conn-actions');
-    itemHead.appendChild(el('span', 'cost-edit-title', rec.display));
-    var delRecBtn = el('button', 'btn-tiny', 'Delete item');
-    delRecBtn.onclick = function () {
-      var err = deleteRecipe(key);
-      if (err) { alert(err); return; }
-      render();
-    };
-    itemHead.appendChild(delRecBtn);
-    card.appendChild(itemHead);
-
-    var fieldsRow = el('div', 'cost-edit-fields');
-    function labeledField(label, inputEl) {
-      var wrap = el('span', 'cost-edit-field');
-      wrap.appendChild(el('span', 'cost-edit-flabel', label));
-      wrap.appendChild(inputEl);
-      return wrap;
-    }
-    var catInp = document.createElement('input');
-    catInp.type = 'text'; catInp.className = 'cost-inp'; catInp.value = rec.category || '';
-    catInp.oninput = function () { rec.category = catInp.value; };
-    fieldsRow.appendChild(labeledField('Category', catInp));
-
-    var portInp = document.createElement('input');
-    portInp.type = 'number'; portInp.step = 'any'; portInp.className = 'cost-inp'; portInp.value = rec.portions;
-    portInp.oninput = function () { rec.portions = parseFloat(portInp.value) || 1; };
-    fieldsRow.appendChild(labeledField('Portions/batch yield', portInp));
-
-    var sellInp = document.createElement('input');
-    sellInp.type = 'number'; sellInp.step = 'any'; sellInp.className = 'cost-inp'; sellInp.value = rec.sellPrice != null ? rec.sellPrice : '';
-    sellInp.oninput = function () { rec.sellPrice = sellInp.value === '' ? null : (parseFloat(sellInp.value) || 0); rec.sellSource = 'menu'; };
-    fieldsRow.appendChild(labeledField('Sell price', sellInp));
-
-    var rollupLabel = document.createElement('label'); rollupLabel.className = 'cost-edit-field';
-    var rollupChk = document.createElement('input'); rollupChk.type = 'checkbox'; rollupChk.checked = !!rec.inRollup;
-    rollupChk.onchange = function () { rec.inRollup = rollupChk.checked; };
-    rollupLabel.appendChild(rollupChk);
-    rollupLabel.appendChild(document.createTextNode(' Counts in overall COGS% (uncheck for a batch sauce/prep item)'));
-    fieldsRow.appendChild(rollupLabel);
-
-    card.appendChild(fieldsRow);
-
-    var linesTable = el('div', 'cost-table');
-    rec.lines.forEach(function (line, idx) {
-      var lrow = el('div', 'cost-row-batch');
-      var ingInp = document.createElement('input');
-      ingInp.type = 'text'; ingInp.className = 'cost-inp-wide'; ingInp.value = line.ingredient;
-      ingInp.oninput = function () { line.ingredient = ingInp.value; tagSpan.innerHTML = costingLineKindTag(key, ingInp.value); };
-      var qInp = document.createElement('input');
-      qInp.type = 'number'; qInp.step = 'any'; qInp.className = 'cost-inp'; qInp.value = line.qty;
-      qInp.oninput = function () { line.qty = parseFloat(qInp.value) || 0; };
-      var tagSpan = el('span', null, costingLineKindTag(key, line.ingredient));
-      var rmBtn = el('button', 'btn-tiny', '✕');
-      rmBtn.onclick = function () { rec.lines.splice(idx, 1); render(); };
-      lrow.appendChild(ingInp); lrow.appendChild(qInp); lrow.appendChild(tagSpan); lrow.appendChild(rmBtn);
-      linesTable.appendChild(lrow);
-    });
-    card.appendChild(linesTable);
-
-    var addLineBtn = el('button', 'btn-tiny', '+ Add ingredient line');
-    addLineBtn.onclick = function () { rec.lines.push({ ingredient: '', qty: 0, kind: null }); render(); };
-    card.appendChild(addLineBtn);
-
-    recCard.appendChild(card);
-  });
-
-  var addRecRow = el('div', 'conn-actions');
-  var newRecInp = document.createElement('input');
-  newRecInp.type = 'text'; newRecInp.placeholder = 'New menu item name'; newRecInp.className = 'cost-inp-wide';
-  newRecInp.value = costingState.editNewItemName;
-  newRecInp.oninput = function () { costingState.editNewItemName = newRecInp.value; };
-  var addRecBtn = el('button', 'btn-small', '+ Add menu item');
-  addRecBtn.onclick = function () {
-    var err = addRecipe(costingState.editNewItemName);
-    if (err) { alert(err); return; }
-    costingState.editNewItemName = '';
-    render();
-  };
-  addRecRow.appendChild(newRecInp); addRecRow.appendChild(addRecBtn);
-  recCard.appendChild(addRecRow);
-  root.appendChild(recCard);
+  /* Where the OTHER half of editing now lives, so this tab doesn't look like
+     it's missing the recipes it used to also hold. */
+  var xref = el('div', 'recon-card fade-in');
+  xref.appendChild(el('div', 'recon-inst',
+    'Looking for what goes into a dish - patty size, an extra sauce, the sell price? That’s on the <b>Recipe costing</b> tab now: click any menu item in the "Every menu item" table and it opens right there, next to its COGS%.'));
+  root.appendChild(xref);
 }
 
 /* "Real sales mix" - actual food cost weighted by what Square says really
@@ -2932,11 +3126,38 @@ function renderSalesMix(root, report) {
   head.appendChild(el('span', 'recon-metric', 'Real sales mix (Square)'));
   var periodWrap = el('span');
   [{ d: 28, label: '4 weeks' }, { d: 84, label: '12 weeks' }, { d: 182, label: '26 weeks' }].forEach(function (p) {
-    var b = el('button', 'btn-tiny' + (costingState.salesPeriodDays === p.d ? ' btn-tiny-active' : ''), p.label);
+    var active = !costingState.salesMonth && costingState.salesPeriodDays === p.d;
+    var b = el('button', 'btn-tiny' + (active ? ' btn-tiny-active' : ''), p.label);
     b.style.marginLeft = '0.35rem';
-    b.onclick = function () { costingState.salesPeriodDays = p.d; costingState.salesLoaded = false; fetchItemSales(); render(); };
+    b.onclick = function () {
+      costingState.salesPeriodDays = p.d;
+      costingState.salesMonth = null; /* a trailing window and a fixed month are alternatives, never both */
+      costingState.salesLoaded = false;
+      fetchItemSales(); render();
+    };
     periodWrap.appendChild(b);
   });
+  /* A specific calendar month, for "how did July actually go" - the trailing
+     windows above can never line up with a month, and a month is what every
+     other number Kane looks at (the workbook, the P&L) is cut by. */
+  var monthSel = document.createElement('select');
+  monthSel.className = 'cost-inp';
+  monthSel.style.marginLeft = '0.45rem';
+  var optTrailing = document.createElement('option');
+  optTrailing.value = ''; optTrailing.textContent = 'Or pick a month…';
+  monthSel.appendChild(optTrailing);
+  recentSalesMonths(13).forEach(function (m) {
+    var o = document.createElement('option');
+    o.value = m.key; o.textContent = m.label;
+    monthSel.appendChild(o);
+  });
+  monthSel.value = costingState.salesMonth || '';
+  monthSel.onchange = function () {
+    costingState.salesMonth = monthSel.value || null;
+    costingState.salesLoaded = false;
+    fetchItemSales(); render();
+  };
+  periodWrap.appendChild(monthSel);
   head.appendChild(periodWrap);
   card.appendChild(head);
 
@@ -2958,19 +3179,25 @@ function renderSalesMix(root, report) {
 
   var mix = buildSalesMix(report);
   if (!mix || !mix.days) {
-    card.appendChild(el('div', 'recon-inst', 'No Square sales data stored for this period yet - it backfills automatically in the background and will fill in over the next little while.'));
+    card.appendChild(el('div', 'recon-inst', costingState.salesMonth
+      ? 'No Square sales stored for that month yet - it backfills automatically in the background, so an older month can take a little while to fill in.'
+      : 'No Square sales data stored for this period yet - it backfills automatically in the background and will fill in over the next little while.'));
     root.appendChild(card);
     return;
   }
 
-  var summaryLine = 'Over ' + mix.days + ' day' + (mix.days === 1 ? '' : 's') + ' of Square sales'
+  var periodLine = costingState.salesMonth
+    ? ('Over ' + esc(mix.from || '') + ' to ' + esc(mix.to || '') + ' of Square sales')
+    : ('Over ' + mix.days + ' day' + (mix.days === 1 ? '' : 's') + ' of Square sales');
+  var summaryLine = periodLine
     + (mix.actualCogsPct != null ? ', actual sales-weighted food cost is ' : ', ')
     + (mix.actualCogsPct != null ? '<b class="' + costingPctClass(mix.actualCogsPct) + '">' + mix.actualCogsPct.toFixed(1) + '%</b> of revenue for matched items' : 'no matched items yet')
     + (report.overallPct != null ? ' (vs ' + report.overallPct.toFixed(1) + '% theoretical menu average).' : '.');
   card.appendChild(el('div', 'recon-inst', summaryLine));
   if (mix.matchedRevenueSharePct != null) {
     card.appendChild(el('div', 'recon-inst',
-      mix.matchedRevenueSharePct.toFixed(0) + '% of Square revenue in this period matched to a recipe here; the rest is listed as "not matched" below - usually a naming difference between Square and the recipe name that’s easy to fix.'));
+      mix.matchedRevenueSharePct.toFixed(0) + '% of Square revenue in this period matched to a recipe here; the rest is listed as "not matched" below - usually a naming difference between Square and the recipe name, which you can fix yourself in "Match Square sales to menu items".'
+      + (mix.ignoredCount ? ' (' + mix.ignoredCount + ' Square item' + (mix.ignoredCount === 1 ? '' : 's') + ' you’ve marked "not a menu item" are left out of both sides of that.)' : '')));
   }
 
   if (mix.matched.length) {
@@ -3007,11 +3234,103 @@ function renderSalesMix(root, report) {
     var names = mix.unmatched.slice(0, 15).map(function (u) { return esc(u.name) + ' (' + (u.qty % 1 === 0 ? u.qty : u.qty.toFixed(1)) + ' sold)'; }).join(', ');
     unCard.innerHTML = '<b>Not matched to a recipe (' + mix.unmatched.length + '):</b> ' + names
       + (mix.unmatched.length > 15 ? ', + ' + (mix.unmatched.length - 15) + ' more' : '')
-      + '. These sold in Square but the name doesn’t exactly match a recipe key here - rename either side (in Square, or via "Edit recipes & ingredients") to bring them into the sales-weighted numbers above.';
+      + '. These sold in Square but the name doesn’t match a recipe here - point each one at the right menu item (or mark it "not a menu item") in the matcher below, and it joins the sales-weighted numbers above straight away.';
     card.appendChild(unCard);
   }
 
+  card.appendChild(renderSalesAliasEditor(report));
   root.appendChild(card);
+}
+
+/* ---------- "Match Square sales to menu items" ----------
+   Every Square-sold name in the period with a dropdown to say which recipe
+   it actually is - the fix for a till name that doesn't match a recipe key
+   ("Classic Daddy Burger" vs "classic daddy"), which used to need a code
+   change and a redeploy. Deliberately lists MATCHED rows too, not just
+   unmatched ones: a wrong match is worse than a missing one and there'd
+   otherwise be no way to see or undo it. Saves through the same appstate
+   sync as everything else, so a fix made on the phone is there on the
+   laptop. Collapsed by default - it's a long list and most visits don't
+   need it. */
+function renderSalesAliasEditor(report) {
+  var rows = allSquareRows(report);
+  var unresolved = rows.filter(function (r) { return r.status === 'unresolved'; }).length;
+
+  var wrap = document.createElement('details');
+  wrap.className = 'cost-details';
+  if (unresolved) wrap.open = true; /* something actually needs a decision - don't hide it */
+  var sum = document.createElement('summary');
+  sum.className = 'cost-summary';
+  sum.textContent = 'Match Square sales to menu items'
+    + (unresolved ? ' · ' + unresolved + ' need' + (unresolved === 1 ? 's' : '') + ' a match' : ' · all ' + rows.length + ' matched');
+  wrap.appendChild(sum);
+
+  wrap.appendChild(el('div', 'recon-inst',
+    'One row per item name Square sold in this period. Pick the menu item it really is, or mark it "Not a menu item" for things like a tip, a bag charge or a one-off special you don’t cost - those are then left out of the sales-mix numbers entirely instead of sitting here as a permanent gap. Changes save straight away.'));
+
+  if (!rows.length) {
+    wrap.appendChild(el('div', 'recon-inst', 'No Square item sales in this period yet.'));
+    return wrap;
+  }
+
+  /* Options are the sellable menu items only - a batch sauce isn't something
+     Square can have sold on its own, so offering it would only invite a
+     wrong match. */
+  var choices = report.items.filter(function (it) { return it.inRollup; })
+    .map(function (it) { return { key: it.key, display: it.display }; })
+    .sort(function (a, b) { return a.display.localeCompare(b.display); });
+
+  var table = el('div', 'cost-table');
+  var thead = el('div', 'cost-row cost-row-head');
+  thead.appendChild(el('span', 'cost-col-name', 'Sold in Square as'));
+  thead.appendChild(el('span', 'cost-col-num', 'Qty'));
+  thead.appendChild(el('span', 'cost-col-num', 'Revenue'));
+  thead.appendChild(el('span', 'cost-col-num', 'Counts as'));
+  table.appendChild(thead);
+
+  rows.forEach(function (r) {
+    var row = el('div', 'cost-row' + (r.status === 'unresolved' ? ' cost-row-over' : ''));
+    var nameCell = el('span', 'cost-col-name');
+    nameCell.innerHTML = esc(r.name)
+      + (r.status === 'exact' ? ' <span class="cost-tag">name matches</span>' : '')
+      + (r.status === 'alias' ? ' <span class="cost-tag">matched by you</span>' : '')
+      + (r.status === 'ignored' ? ' <span class="cost-tag">not a menu item</span>' : '')
+      + (r.status === 'unresolved' ? ' <span class="cost-tag cost-tag-bad">not matched</span>' : '');
+    row.appendChild(nameCell);
+    row.appendChild(el('span', 'cost-col-num', r.qty % 1 === 0 ? String(r.qty) : r.qty.toFixed(1)));
+    row.appendChild(el('span', 'cost-col-num', fmtMoney(r.revenue, true)));
+
+    var selCell = el('span', 'cost-col-num');
+    var sel = document.createElement('select');
+    sel.className = 'cost-inp-wide';
+    var oNone = document.createElement('option');
+    oNone.value = ''; oNone.textContent = '— not matched —';
+    sel.appendChild(oNone);
+    var oIgnore = document.createElement('option');
+    oIgnore.value = '__ignore__'; oIgnore.textContent = 'Not a menu item (ignore it)';
+    sel.appendChild(oIgnore);
+    choices.forEach(function (c) {
+      var o = document.createElement('option');
+      o.value = c.key; o.textContent = c.display;
+      sel.appendChild(o);
+    });
+    /* An exact name match shows as that item WITHOUT writing an alias for it
+       - picking the same value again is then a no-op, and clearing it back
+       to "not matched" can't fight the exact match that would re-apply. */
+    sel.value = (r.alias != null) ? r.alias : (r.resolvedKey || '');
+    sel.onchange = (function (sqKey) { return function () {
+      var v = this.value;
+      if (!v) delete SALES_ALIASES[sqKey];
+      else SALES_ALIASES[sqKey] = v;
+      saveSalesAliases();
+      render();
+    }; })(r.sqKey);
+    selCell.appendChild(sel);
+    row.appendChild(selCell);
+    table.appendChild(row);
+  });
+  wrap.appendChild(table);
+  return wrap;
 }
 
 /* ============================================================
@@ -3043,7 +3362,8 @@ function simHasOverride(key) {
    in the selected period - profit-impact math needs a real quantity, and an
    item with zero recent sales would either vanish (0 weight) or need a
    made-up number, so it's left out of the simulator/quadrant rather than
-   guessed. (It's still fully editable in "Edit recipes & ingredients".) */
+   guessed. (It's still fully editable by clicking it in "Every menu item"
+   above.) */
 function buildSimRows(report, mix) {
   if (!mix) return [];
   var rows = [];
@@ -3109,11 +3429,13 @@ function buildQuadrant(rows) {
   return { boxes: boxes, avgPop: avgPop, avgGP: avgGP };
 }
 
+/* Rendered INTO the Recipe costing tab (inside a collapsible section), not
+   as a screen of its own - so no screen title here, just the subtitle that
+   says what the numbers below it mean. */
 function renderSimulator(root) {
-  root.appendChild(el('div', 'screen-title', 'Menu simulator'));
   root.appendChild(el('p', 'screen-sub',
     'Try a price change or a recipe tweak here first and see the profit impact before you touch the real menu or recipes. '
-    + 'Uses your real Square sales mix from the Recipe costing tab, so the impact is "if my recent sales repeated at this price/cost" - not a forecast of how a price change would affect how many you actually sell.'));
+    + 'Uses the real Square sales mix from the section above, so the impact is "if my recent sales repeated at this price/cost" - not a forecast of how a price change would affect how many you actually sell.'));
 
   if (costingState.salesError) { root.appendChild(el('div', 'recon-card fade-in', '<div class="recon-inst">' + esc(costingState.salesError) + '</div>')); return; }
   if (!costingState.salesLoaded) { root.appendChild(el('div', 'recon-card fade-in', '<div class="recon-inst">Loading Square sales…</div>')); return; }
@@ -3127,7 +3449,7 @@ function renderSimulator(root) {
   var rows = buildSimRows(report, mix);
 
   if (!rows.length) {
-    root.appendChild(el('div', 'recon-card fade-in', '<div class="recon-inst">No matched Square sales in the current period yet, so there’s nothing to simulate against - it backfills automatically, or widen the period on the Recipe costing tab.</div>'));
+    root.appendChild(el('div', 'recon-card fade-in', '<div class="recon-inst">No matched Square sales in the current period yet, so there’s nothing to simulate against - it backfills automatically, or widen the period in the "Real sales mix" section above.</div>'));
     return;
   }
 
@@ -3327,36 +3649,198 @@ function renderSimulator(root) {
   recompute();
 }
 
-function renderCosting(root) {
-  var head = el('div', 'recon-head');
-  head.appendChild(el('div', 'screen-title', 'Recipe costing'));
-  var editBtn = el('button', 'btn-small', costingState.editActive ? 'Back to report' : 'Edit recipes & ingredients');
-  editBtn.onclick = function () {
-    if (!costingState.editActive) {
-      costingState.editSnapshot = deepClone(RECIPE_DATA);
-      costingState.editProblems = [];
-      costingState.editActive = true;
-    } else {
-      costingState.editActive = false;
-    }
+/* ---------- Inline menu-item editor ----------
+   Clicking a row in "Every menu item" opens this panel directly under it -
+   the same ingredient/portion/price editing the old separate "Edit recipes
+   & ingredients" mode did, but in place, with the item's own cost and COGS%
+   still on screen above it. The point is that the number Kane is trying to
+   move and the thing that moves it are in the same place: shrink the patty,
+   see what it does to COGS%, save.
+
+   Edits go straight into RECIPE_DATA as they're typed (so the panel can't
+   get out of step with what's being costed) with a deep copy of just this
+   one recipe held for Cancel. Save runs the same whole-document validation
+   as everywhere else but only SHOWS this item's problems - being told about
+   a half-finished line in some other burger while trying to save this one
+   would be baffling. */
+function openItemEditor(key) {
+  costingState.openItemKey = key;
+  costingState.itemEditSnapshot = deepClone(RECIPE_DATA.recipes[key]);
+  costingState.itemProblems = [];
+}
+function closeItemEditor() {
+  costingState.openItemKey = null;
+  costingState.itemEditSnapshot = null;
+  costingState.itemProblems = [];
+}
+function renderItemEditPanel(key) {
+  var rec = RECIPE_DATA.recipes[key];
+  var panel = el('div', 'cost-edit-item');
+  if (!rec) { closeItemEditor(); return panel; }
+
+  var itemHead = el('div', 'conn-actions');
+  itemHead.appendChild(el('span', 'cost-edit-title', rec.display));
+  panel.appendChild(itemHead);
+  panel.appendChild(el('div', 'recon-inst', 'Change an amount, swap or drop an ingredient, or move the sell price - the cost and COGS% above update when you save.'));
+
+  var fieldsRow = el('div', 'cost-edit-fields');
+  function labeledField(label, inputEl) {
+    var wrap = el('span', 'cost-edit-field');
+    wrap.appendChild(el('span', 'cost-edit-flabel', label));
+    wrap.appendChild(inputEl);
+    return wrap;
+  }
+  var catInp = document.createElement('input');
+  catInp.type = 'text'; catInp.className = 'cost-inp'; catInp.value = rec.category || '';
+  catInp.oninput = function () { rec.category = catInp.value; };
+  fieldsRow.appendChild(labeledField('Category', catInp));
+
+  var portInp = document.createElement('input');
+  portInp.type = 'number'; portInp.step = 'any'; portInp.className = 'cost-inp'; portInp.value = rec.portions;
+  portInp.oninput = function () { rec.portions = parseFloat(portInp.value) || 1; };
+  fieldsRow.appendChild(labeledField('Portions/batch yield', portInp));
+
+  var sellInp = document.createElement('input');
+  sellInp.type = 'number'; sellInp.step = 'any'; sellInp.className = 'cost-inp'; sellInp.value = rec.sellPrice != null ? rec.sellPrice : '';
+  sellInp.oninput = function () { rec.sellPrice = sellInp.value === '' ? null : (parseFloat(sellInp.value) || 0); rec.sellSource = 'menu'; };
+  fieldsRow.appendChild(labeledField('Sell price', sellInp));
+
+  var rollupLabel = document.createElement('label'); rollupLabel.className = 'cost-edit-field';
+  var rollupChk = document.createElement('input'); rollupChk.type = 'checkbox'; rollupChk.checked = !!rec.inRollup;
+  rollupChk.onchange = function () { rec.inRollup = rollupChk.checked; };
+  rollupLabel.appendChild(rollupChk);
+  rollupLabel.appendChild(document.createTextNode(' Counts in overall COGS% (uncheck for a batch sauce/prep item)'));
+  fieldsRow.appendChild(rollupLabel);
+  panel.appendChild(fieldsRow);
+
+  /* ---- Ingredient lines ---- */
+  panel.appendChild(el('div', 'recon-inst', 'Each line shows what it resolved to - a plain ingredient, another recipe used as an ingredient (a sauce inside a burger, say), or "not found" if the name doesn’t match anything in the Ingredients tab yet.'));
+  var linesTable = el('div', 'cost-table');
+  rec.lines.forEach(function (line, idx) {
+    var lrow = el('div', 'cost-row-batch');
+    var ingInp = document.createElement('input');
+    ingInp.type = 'text'; ingInp.className = 'cost-inp-wide'; ingInp.value = line.ingredient;
+    /* Patches just the tag rather than re-rendering, so typing an ingredient
+       name doesn't lose the cursor on every keystroke. */
+    ingInp.oninput = function () { line.ingredient = ingInp.value; tagSpan.innerHTML = costingLineKindTag(key, ingInp.value); };
+    var qInp = document.createElement('input');
+    qInp.type = 'number'; qInp.step = 'any'; qInp.className = 'cost-inp'; qInp.value = line.qty;
+    qInp.oninput = function () { line.qty = parseFloat(qInp.value) || 0; };
+    var tagSpan = el('span', null, costingLineKindTag(key, line.ingredient));
+    var rmBtn = el('button', 'btn-tiny', '✕');
+    rmBtn.title = 'Remove this ingredient from the item';
+    rmBtn.onclick = function () { rec.lines.splice(idx, 1); render(); };
+    lrow.appendChild(ingInp); lrow.appendChild(qInp); lrow.appendChild(tagSpan); lrow.appendChild(rmBtn);
+    linesTable.appendChild(lrow);
+  });
+  panel.appendChild(linesTable);
+
+  var addLineBtn = el('button', 'btn-tiny', '+ Add ingredient line');
+  addLineBtn.onclick = function () { rec.lines.push({ ingredient: '', qty: 0, kind: null }); render(); };
+  panel.appendChild(addLineBtn);
+
+  /* ---- Problems (this item only) ---- */
+  if (costingState.itemProblems.length) {
+    var probBox = el('div', 'diag');
+    probBox.innerHTML = '<b>Fix these before saving:</b><ul style="margin:0.3rem 0 0 1.1rem; padding:0;">'
+      + costingState.itemProblems.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('')
+      + '</ul>';
+    panel.appendChild(probBox);
+  }
+
+  /* ---- Save / cancel / delete ---- */
+  function handleSaveResult(problems) {
+    costingState.itemSaving = false;
+    if (!problems.length) { closeItemEditor(); render(); return; }
+    /* validateRecipeData() prefixes every problem with the display name it
+       belongs to, so this keeps only the ones about the item being edited.
+       If the blocker is genuinely elsewhere (or the save itself failed)
+       there'd be nothing left to show, so fall back to the full list. */
+    var mine = problems.filter(function (p) { return p.indexOf('"' + rec.display + '"') === 0; });
+    costingState.itemProblems = mine.length ? mine : problems;
+    render();
+  }
+  var actions = el('div', 'conn-actions');
+  var saveBtn = el('button', 'btn-small', costingState.itemSaving ? 'Saving…' : 'Save changes');
+  saveBtn.disabled = costingState.itemSaving;
+  saveBtn.onclick = function () {
+    costingState.itemSaving = true; render();
+    saveRecipeData(handleSaveResult);
+  };
+  var cancelBtn = el('button', 'btn-plain', 'Cancel');
+  cancelBtn.onclick = function () {
+    if (costingState.itemEditSnapshot) RECIPE_DATA.recipes[key] = costingState.itemEditSnapshot;
+    closeItemEditor();
     render();
   };
-  head.appendChild(editBtn);
-  root.appendChild(head);
+  var delBtn = el('button', 'btn-plain', 'Delete this item');
+  delBtn.onclick = function () {
+    var err = deleteRecipe(key);
+    if (err) { alert(err); return; }
+    closeItemEditor();
+    costingState.itemSaving = true; render();
+    saveRecipeData(function (problems) {
+      costingState.itemSaving = false;
+      if (problems.length) alert(problems.join('\n'));
+      render();
+    });
+  };
+  actions.appendChild(saveBtn); actions.appendChild(cancelBtn); actions.appendChild(delBtn);
+  panel.appendChild(actions);
+  return panel;
+}
 
-  if (costingState.editActive) { renderCostingEditor(root); return; }
-
+function renderCosting(root) {
+  root.appendChild(el('div', 'screen-title', 'Recipe costing'));
   root.appendChild(el('p', 'screen-sub',
-    'Theoretical cost and Cost-of-goods % for every menu item, worked out from ingredient quantities × current supplier prices - not what you actually spent, what the menu SHOULD cost if every dish were made exactly to spec with zero waste. '
-    + 'Ingredient prices come from the weekly supplier price check and update here automatically (no redeploy needed); the recipes themselves (what goes in each dish, and how much) update instantly here too - use "Edit recipes & ingredients" above.'));
+    'Theoretical cost and Cost-of-goods % for every menu item, worked out from ingredient quantities × the ingredient prices saved here - not what you actually spent, what the menu SHOULD cost if every dish were made exactly to spec with zero waste. '
+    + 'Click any item in the table below to change what goes into it or what you charge for it; raw ingredient prices and pack sizes live on the <b>Ingredients</b> tab.'));
 
   var report = buildCostingReport();
 
+  /* ---- "Your COGS moved" flags ----
+     A supplier price change can move an item's COGS% between one visit and
+     the next with nothing on screen saying so. This says which items moved
+     and by how much, once, until acknowledged. */
+  if (costingState.priceChangeFlags.length) {
+    var flagCard = el('div', 'recon-card fade-in banner-amber-card');
+    var fHead = el('div', 'recon-head');
+    fHead.appendChild(el('span', 'recon-metric', 'Your COGS moved since you last looked'));
+    var ackBtn = el('button', 'btn-small', 'Got it');
+    ackBtn.onclick = function () { acknowledgePriceFlags(); };
+    fHead.appendChild(ackBtn);
+    flagCard.appendChild(fHead);
+    flagCard.appendChild(el('div', 'recon-inst',
+      'An ingredient price changed, so these menu items now cost a different share of what you sell them for. Nothing else has changed - same recipes, same sell prices.'));
+    var fTable = el('div', 'cost-table');
+    var fHeadRow = el('div', 'cost-row cost-row-head');
+    fHeadRow.appendChild(el('span', 'cost-col-name', 'Item'));
+    fHeadRow.appendChild(el('span', 'cost-col-num', 'Was'));
+    fHeadRow.appendChild(el('span', 'cost-col-num', 'Now'));
+    fHeadRow.appendChild(el('span', 'cost-col-num', 'Change'));
+    fTable.appendChild(fHeadRow);
+    costingState.priceChangeFlags.forEach(function (f) {
+      var diff = f.newPct - f.oldPct;
+      var row = el('div', 'cost-row' + (diff > 0 ? ' cost-row-over' : ''));
+      row.appendChild(el('span', 'cost-col-name', esc(f.display)));
+      row.appendChild(el('span', 'cost-col-num', f.oldPct.toFixed(1) + '%'));
+      var nowCell = el('span', 'cost-col-num ' + costingPctClass(f.newPct));
+      nowCell.textContent = f.newPct.toFixed(1) + '%';
+      row.appendChild(nowCell);
+      var dCell = el('span', 'cost-col-num ' + (diff > 0 ? 'bad' : 'good'));
+      dCell.textContent = (diff > 0 ? '+' : '−') + Math.abs(diff).toFixed(1) + ' pts';
+      row.appendChild(dCell);
+      fTable.appendChild(row);
+    });
+    flagCard.appendChild(fTable);
+    root.appendChild(flagCard);
+  }
+
   var updatedNote;
   if (costingState.overridesUpdatedAt) {
-    updatedNote = 'Ingredient prices last updated ' + new Date(costingState.overridesUpdatedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) + ' from the weekly supplier check.';
+    updatedNote = 'Ingredient prices last updated ' + new Date(costingState.overridesUpdatedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) + '.';
   } else if (costingState.overridesLoaded) {
-    updatedNote = 'No weekly price update has been posted yet - showing the last known prices baked in when this tab was built.';
+    updatedNote = 'No price update has been posted to the dashboard yet - showing the prices baked in when this tab was built, plus anything you’ve changed on the Ingredients tab.';
   } else {
     updatedNote = 'Loading the latest ingredient prices…';
   }
@@ -3403,23 +3887,24 @@ function renderCosting(root) {
     root.appendChild(tiCard);
   }
 
-  /* Per-item table */
+  /* Per-item table - every row is also the way in to editing that item */
   var tableCard = el('div', 'recon-card fade-in');
   tableCard.appendChild(el('div', 'recon-metric', 'Every menu item'));
-  tableCard.appendChild(el('div', 'recon-inst', 'Sorted highest Cost-of-goods % first. Items above the 30% target are flagged.'));
+  tableCard.appendChild(el('div', 'recon-inst', 'Sorted highest Cost-of-goods % first. Items above the 30% target are flagged. <b>Click any item</b> to change its ingredients, portion sizes or sell price.'));
   var table = el('div', 'cost-table');
-  var head = el('div', 'cost-row cost-row-head');
-  head.appendChild(el('span', 'cost-col-name', 'Item'));
-  head.appendChild(el('span', 'cost-col-num', 'Cost'));
-  head.appendChild(el('span', 'cost-col-num', 'Sell'));
-  head.appendChild(el('span', 'cost-col-num', 'COGS%'));
-  table.appendChild(head);
+  var thead = el('div', 'cost-row cost-row-head');
+  thead.appendChild(el('span', 'cost-col-name', 'Item'));
+  thead.appendChild(el('span', 'cost-col-num', 'Cost'));
+  thead.appendChild(el('span', 'cost-col-num', 'Sell'));
+  thead.appendChild(el('span', 'cost-col-num', 'COGS%'));
+  table.appendChild(thead);
 
   var sellableItems = report.items.filter(function (it) { return it.inRollup; });
   var batchItems = report.items.filter(function (it) { return !it.inRollup; });
 
   sellableItems.forEach(function (it) {
-    var row = el('div', 'cost-row' + (it.overTarget ? ' cost-row-over' : ''));
+    var open = costingState.openItemKey === it.key;
+    var row = el('div', 'cost-row cost-row-click' + (it.overTarget ? ' cost-row-over' : '') + (open ? ' cost-row-open' : ''));
     var nameCell = el('span', 'cost-col-name');
     nameCell.innerHTML = esc(it.display) + (it.sellSource === 'sheet' ? ' <span class="cost-tag">no current menu price</span>' : '');
     row.appendChild(nameCell);
@@ -3428,28 +3913,99 @@ function renderCosting(root) {
     var pctCell = el('span', 'cost-col-num' + (it.pct != null ? ' ' + costingPctClass(it.pct) : ''));
     pctCell.textContent = it.pct != null ? it.pct.toFixed(1) + '%' : '—';
     row.appendChild(pctCell);
+    row.title = open ? 'Click to close' : 'Click to edit this item';
+    row.onclick = (function (key) { return function () {
+      /* Clicking a different item while one is open discards nothing: edits
+         are already live in RECIPE_DATA either way, and the snapshot only
+         backs the Cancel button - so closing without saving is Cancel. */
+      if (costingState.openItemKey === key) {
+        if (costingState.itemEditSnapshot) RECIPE_DATA.recipes[key] = costingState.itemEditSnapshot;
+        closeItemEditor();
+      } else {
+        if (costingState.openItemKey && costingState.itemEditSnapshot && RECIPE_DATA.recipes[costingState.openItemKey]) {
+          RECIPE_DATA.recipes[costingState.openItemKey] = costingState.itemEditSnapshot;
+        }
+        openItemEditor(key);
+      }
+      render();
+    }; })(it.key);
     table.appendChild(row);
+    if (open) table.appendChild(renderItemEditPanel(it.key));
   });
   tableCard.appendChild(table);
+
+  /* ---- Add a whole new menu item ---- */
+  var addRow = el('div', 'conn-actions');
+  var newItemInp = document.createElement('input');
+  newItemInp.type = 'text'; newItemInp.placeholder = 'New menu item name'; newItemInp.className = 'cost-inp-wide';
+  newItemInp.value = costingState.itemNewName;
+  newItemInp.oninput = function () { costingState.itemNewName = newItemInp.value; };
+  var addBtn = el('button', 'btn-small', '+ Add menu item');
+  addBtn.onclick = function () {
+    var name = costingState.itemNewName;
+    var err = addRecipe(name);
+    if (err) { alert(err); return; }
+    costingState.itemNewName = '';
+    /* Opens straight into its own editor - a brand new item has no
+       ingredients yet, and saving it in that state is (correctly) refused,
+       so there's nothing useful to do except fill it in now. */
+    openItemEditor(String(name).trim().toLowerCase());
+    render();
+  };
+  addRow.appendChild(newItemInp); addRow.appendChild(addBtn);
+  tableCard.appendChild(addRow);
   root.appendChild(tableCard);
 
   /* Batch/prep sub-recipes: sauces etc. are never sold on their own, so a
      "sell price"/COGS% for them is meaningless - shown separately, cost only,
-     purely so the numbers feeding into the dishes above aren't a black box. */
+     purely so the numbers feeding into the dishes above aren't a black box.
+     Clickable to edit for the same reason the dishes are - a sauce recipe
+     is exactly the kind of thing that gets tweaked. */
   if (batchItems.length) {
     var batchCard = el('div', 'recon-card fade-in');
     batchCard.appendChild(el('div', 'recon-metric', 'Batch sauces and prep (not sold on their own)'));
-    batchCard.appendChild(el('div', 'recon-inst', 'Cost per batch, at current ingredient prices - these feed into the dishes above and aren’t counted in the overall COGS% themselves.'));
+    batchCard.appendChild(el('div', 'recon-inst', 'Cost per batch, at current ingredient prices - these feed into the dishes above and aren’t counted in the overall COGS% themselves. Click one to edit it.'));
     var bTable = el('div', 'cost-table');
     batchItems.sort(function (a, b) { return a.display.localeCompare(b.display); }).forEach(function (it) {
-      var row = el('div', 'cost-row-batch');
+      var bOpen = costingState.openItemKey === it.key;
+      var row = el('div', 'cost-row-batch cost-row-click' + (bOpen ? ' cost-row-open' : ''));
       row.appendChild(el('span', 'cost-col-name', esc(it.display)));
       row.appendChild(el('span', 'cost-col-num', fmtMoney(it.batchTotal, true) + ' / batch (' + it.portions + ' serves, ' + fmtMoney(it.cost, true) + ' each)'));
+      row.onclick = (function (key) { return function () {
+        if (costingState.openItemKey === key) {
+          if (costingState.itemEditSnapshot) RECIPE_DATA.recipes[key] = costingState.itemEditSnapshot;
+          closeItemEditor();
+        } else {
+          if (costingState.openItemKey && costingState.itemEditSnapshot && RECIPE_DATA.recipes[costingState.openItemKey]) {
+            RECIPE_DATA.recipes[costingState.openItemKey] = costingState.itemEditSnapshot;
+          }
+          openItemEditor(key);
+        }
+        render();
+      }; })(it.key);
       bTable.appendChild(row);
+      if (bOpen) bTable.appendChild(renderItemEditPanel(it.key));
     });
     batchCard.appendChild(bTable);
     root.appendChild(batchCard);
   }
+
+  /* ---- Menu simulator, folded in here ----
+     It was its own top-level tab, but it's the same subject (what a dish
+     costs and what it's sold for) against the same Square sales mix shown
+     above, and having it a tab away meant deciding to change a price and
+     testing that change were in two different places. Collapsed by default
+     so the costing report stays the thing you land on. */
+  var simWrap = document.createElement('details');
+  simWrap.className = 'cost-details';
+  var simSum = document.createElement('summary');
+  simSum.className = 'cost-summary';
+  simSum.textContent = 'Menu simulator · try a price or recipe change before you make it';
+  simWrap.appendChild(simSum);
+  var simBody = el('div');
+  renderSimulator(simBody);
+  simWrap.appendChild(simBody);
+  root.appendChild(simWrap);
 
   /* Known gaps / assumptions, always visible so nothing is silently guessed */
   var gaps = el('div', 'recon-card fade-in');
@@ -3460,8 +4016,8 @@ function renderCosting(root) {
     + '<li>Avocado: Windsor Farm Shop prices by the tray with no printed count; using an estimated 5kg tray (~25 avocados at the ~200g you weighed) - update this if you get an exact count.</li>'
     + '<li>"Caramelised onion" is a $1 menu add-on with no ingredient recipe in the costing sheet at all, so it isn’t costed here.</li>'
     + '<li>"Bacon & egg burger" rarely sells and isn’t on the printed menu - shown at its last known sell price rather than a current one.</li>'
-    + '<li>29 ingredients (mostly pantry items like sauces, spices and packaging) aren’t tracked in the weekly supplier check - these use the recipe sheet’s original price until they’re added to that tracker.</li>'
-    + '<li>The main table above is still an equal-weighted menu average (every dish counted once). The "Real sales mix" section below is the sales-weighted version, from your actual Square sales - use that one for "what\'s really driving my food cost".</li>'
+    + '<li>Ingredient prices are the ones saved to this dashboard (the recipe sheet’s originals, plus anything you’ve changed on the Ingredients tab). The weekly supplier price check doesn’t feed into here yet - when it does, this tab will say when it last landed.</li>'
+    + '<li>The main table above is still an equal-weighted menu average (every dish counted once). The "Real sales mix" section above is the sales-weighted version, from your actual Square sales - use that one for "what\'s really driving my food cost".</li>'
     + '</ul>'
   ));
   root.appendChild(gaps);
