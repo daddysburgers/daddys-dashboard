@@ -229,6 +229,15 @@ body {
 @media (max-width: 640px) { .cost-table-mix .cost-row { grid-template-columns: 1fr 55px 60px; font-size: 12px; } .cost-table-mix .cost-col-num:nth-child(4), .cost-table-mix .cost-col-num:nth-child(5) { display: none; } }
 .sim-table .cost-row { grid-template-columns: 1fr 60px 85px 90px 90px 90px 95px; }
 @media (max-width: 760px) { .sim-table .cost-row { grid-template-columns: 1fr 70px 80px 80px; font-size: 12px; } .sim-table .cost-col-num:nth-child(3), .sim-table .cost-col-num:nth-child(6) { display: none; } }
+/* Plain .cost-row (ingredient list, "every menu item", batch sauces tables)
+   only ever has 4 columns, but the base 90/90/80px fixed widths plus gaps
+   already eat almost the entire card on a phone, leaving the item-name
+   column ~0 wide - the grid held its fixed tracks and forced the whole
+   table wider than the screen instead of shrinking. Narrower fixed columns
+   below 480px keep all the same numbers visible, just tighter. */
+@media (max-width: 480px) {
+  .cost-row { grid-template-columns: 1fr 55px 55px 50px; gap: 6px; font-size: 12.5px; }
+}
 .sim-row-changed { background: rgba(255,193,7,0.08); border-radius: 8px; }
 .sim-hidden { display: none !important; }
 .sim-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-top: 0.6rem; }
@@ -383,6 +392,16 @@ body {
 .mgr-spark div.bad { background: var(--c-coral); }
 .mgr-target-line { position: absolute; left: 0; right: 0; height: 0; flex: none; min-height: 0; border-top: 1px dashed var(--text); opacity: 0.55; background: none; pointer-events: none; }
 .mgr-meter-track { position: relative; height: 10px; border-radius: 5px; background: var(--cream3); overflow: hidden; }
+/* Below ~480px the row's three fixed-width pieces (150px label + 118px value
+   + the spark/meter between them) no longer fit side by side - .mgr-viz was
+   getting squeezed to 0 width and its text/spark rendered on top of the
+   neighbouring cells instead of just being narrow. Stack label above
+   viz+value on phones instead, same content, one extra line per row. */
+@media (max-width: 480px) {
+  .mgr-row { flex-wrap: wrap; row-gap: 6px; }
+  .mgr-lab { width: 100%; }
+  .mgr-viz { flex: 1 1 auto; }
+}
 @media print {
   .nav, .control-bar, .fresh-row, #go-conn, .btn-plain, .mgr-print-btn { display: none !important; }
   body { background: var(--white); }
@@ -446,6 +465,21 @@ var ACCENTS = [
   { key: 'green',  c: '#1A7A3C', dim: 'rgba(26,122,60,0.12)' }
 ];
 
+/* Pre-refresh saved settings/entries used flat keys like "thisWeek" - map them
+   onto the new type:offset scheme so nothing already saved on Kane's browser breaks.
+   Moved up here (ahead of defaultSettings/loadSettings, which need it immediately
+   below) after finding a real bug this depended on: as a `var`, LEGACY_PERIOD_MAP
+   only gets its object value once execution actually reaches that assignment -
+   before that it's `undefined`. It used to be assigned much further down the
+   file, AFTER `var SETTINGS = loadSettings()` already ran and called
+   normalizePeriodKey() on your saved defaultPeriod - so every single load threw
+   ("Cannot read properties of undefined"), was swallowed by loadSettings()'s
+   try/catch, and silently fell back to defaultSettings() - discarding not just
+   your remembered period but venue name, targets, accent, everything you'd
+   saved. This is almost certainly the real "settings keep resetting" bug. */
+var LEGACY_PERIOD_MAP = { thisWeek: 'week:0', lastWeek: 'week:-1', thisMonth: 'month:0', lastMonth: 'month:-1', thisFY: 'fy:0', lastFY: 'fy:-1' };
+function normalizePeriodKey(key) { return LEGACY_PERIOD_MAP[key] || key || 'week:0'; }
+
 function defaultSettings() {
   return {
     venueName: 'Your venue',
@@ -471,7 +505,7 @@ function loadSettings() {
     return s;
   } catch (e) { return defaultSettings(); }
 }
-function saveSettings() { try { localStorage.setItem('vd_settings', JSON.stringify(SETTINGS)); } catch (e) {} }
+function saveSettings() { try { localStorage.setItem('vd_settings', JSON.stringify(SETTINGS)); } catch (e) {} queueAppStateSync(); }
 var SETTINGS = loadSettings();
 
 function loadJson(key, fallback) {
@@ -480,19 +514,82 @@ function loadJson(key, fallback) {
 var RECON = loadJson('vd_recon', {});          /* metricKey -> 'confirmed' | 'flagged' */
 var ORG_OK = loadJson('vd_orgok', {});         /* sourceKey -> true */
 var MANUAL = loadJson('vd_manual', {});        /* rangeKey -> { from,to,period,values,attested,enteredAt } */
-function saveRecon() { try { localStorage.setItem('vd_recon', JSON.stringify(RECON)); } catch (e) {} }
-function saveOrgOk() { try { localStorage.setItem('vd_orgok', JSON.stringify(ORG_OK)); } catch (e) {} }
-function saveManual() { try { localStorage.setItem('vd_manual', JSON.stringify(MANUAL)); } catch (e) {} }
+function saveRecon() { try { localStorage.setItem('vd_recon', JSON.stringify(RECON)); } catch (e) {} queueAppStateSync(); }
+function saveOrgOk() { try { localStorage.setItem('vd_orgok', JSON.stringify(ORG_OK)); } catch (e) {} queueAppStateSync(); }
+function saveManual() { try { localStorage.setItem('vd_manual', JSON.stringify(MANUAL)); } catch (e) {} queueAppStateSync(); }
 /* Per-period owner-entered figures overlaid on LIVE data (hybrid): rangeKey ->
    { revenue?, cogs? }. Wages (Xero) and transactions (Square) stay live; these
    attested figures replace just the fields the owner types, badged "Entered by you". */
 var OVERRIDES = loadJson('vd_overrides', {});
-function saveOverrides() { try { localStorage.setItem('vd_overrides', JSON.stringify(OVERRIDES)); } catch (e) {} }
+function saveOverrides() { try { localStorage.setItem('vd_overrides', JSON.stringify(OVERRIDES)); } catch (e) {} queueAppStateSync(); }
 /* Uber Eats orders, per shop, per period: rangeKey -> { windsor?, richmond? }.
    Square never sees these (a separate channel), so unlike OVERRIDES this is
    ADDED ON TOP of the live Square count rather than replacing it. */
 var UBER = loadJson('vd_uber', {});
-function saveUber() { try { localStorage.setItem('vd_uber', JSON.stringify(UBER)); } catch (e) {} }
+function saveUber() { try { localStorage.setItem('vd_uber', JSON.stringify(UBER)); } catch (e) {} queueAppStateSync(); }
+
+/* ---------- Server sync for everything above ----------
+   Settings/Recon/Org-ok/Manual entries/Overrides/Uber used to live ONLY in
+   this browser's localStorage - meaning none of it followed you to a
+   different phone or browser, and a cleared browser lost it outright. This
+   pushes the same data to the Worker (one KV document, see /api/state in
+   worker.js), which is now the source of truth; localStorage stays only as
+   an instant-paint cache and an offline fallback if a save can't get out.
+   Debounced so a flurry of edits (typing several fields, then Save) costs
+   one write, not one per keystroke - the KV write quota is shared across
+   the whole account. */
+var appStateSyncTimer = null;
+var appStateSyncing = false;
+var appStateDirtyWhileSyncing = false;
+function queueAppStateSync() {
+  if (appStateSyncTimer) clearTimeout(appStateSyncTimer);
+  appStateSyncTimer = setTimeout(pushAppState, 800);
+}
+function pushAppState() {
+  appStateSyncTimer = null;
+  if (appStateSyncing) { appStateDirtyWhileSyncing = true; return; }
+  appStateSyncing = true;
+  fetch('/api/state', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: SETTINGS, recon: RECON, orgOk: ORG_OK, manual: MANUAL, overrides: OVERRIDES, uber: UBER })
+  }).then(function (res) {
+    appStateSyncing = false;
+    if (!res.ok) throw new Error('save failed');
+    if (state.syncError) { state.syncError = false; render(); }
+    if (appStateDirtyWhileSyncing) { appStateDirtyWhileSyncing = false; queueAppStateSync(); }
+  }).catch(function () {
+    appStateSyncing = false;
+    if (!state.syncError) { state.syncError = true; render(); }
+  });
+}
+/* On boot: pull whatever's already saved server-side - it's the fullest,
+   most recent picture (whatever any device last saved) - and let it replace
+   whatever this particular browser's localStorage happened to have. If the
+   fetch fails (offline, or nothing saved there yet from before this
+   shipped) just keep using the localStorage copies already loaded above,
+   so the dashboard still works on its own. */
+function fetchAppState() {
+  fetch('/api/state').then(function (res) {
+    return res.ok ? res.json() : null;
+  }).then(function (payload) {
+    if (!payload || !payload.data) return;
+    var d = payload.data;
+    if (d.settings && Object.keys(d.settings).length) {
+      var ds = defaultSettings();
+      for (var k in ds) { if (!(k in d.settings)) d.settings[k] = ds[k]; }
+      if (d.settings.defaultPeriod) d.settings.defaultPeriod = normalizePeriodKey(d.settings.defaultPeriod);
+      SETTINGS = d.settings;
+      try { localStorage.setItem('vd_settings', JSON.stringify(SETTINGS)); } catch (e) {}
+    }
+    if (d.recon) { RECON = d.recon; try { localStorage.setItem('vd_recon', JSON.stringify(RECON)); } catch (e) {} }
+    if (d.orgOk) { ORG_OK = d.orgOk; try { localStorage.setItem('vd_orgok', JSON.stringify(ORG_OK)); } catch (e) {} }
+    if (d.manual) { MANUAL = d.manual; try { localStorage.setItem('vd_manual', JSON.stringify(MANUAL)); } catch (e) {} }
+    if (d.overrides) { OVERRIDES = d.overrides; try { localStorage.setItem('vd_overrides', JSON.stringify(OVERRIDES)); } catch (e) {} }
+    if (d.uber) { UBER = d.uber; try { localStorage.setItem('vd_uber', JSON.stringify(UBER)); } catch (e) {} }
+    render();
+    fetchData();
+  }).catch(function () { /* stay on whatever localStorage already gave us above */ });
+}
 function isManual() { return SETTINGS.dataMode === 'manual'; }
 function rangeKey(from, to) { return iso(from) + '_' + iso(to); }
 
@@ -589,10 +686,8 @@ var PERIOD_TYPES = [
   { type: 'fy',      label: 'Financial year' },
   { type: 'custom',  label: 'Custom…' }
 ];
-/* Pre-refresh saved settings/entries used flat keys like "thisWeek" - map them
-   onto the new type:offset scheme so nothing already saved on Kane's browser breaks. */
-var LEGACY_PERIOD_MAP = { thisWeek: 'week:0', lastWeek: 'week:-1', thisMonth: 'month:0', lastMonth: 'month:-1', thisFY: 'fy:0', lastFY: 'fy:-1' };
-function normalizePeriodKey(key) { return LEGACY_PERIOD_MAP[key] || key || 'week:0'; }
+/* LEGACY_PERIOD_MAP / normalizePeriodKey now live up near defaultSettings() /
+   loadSettings(), which need them at boot - see the comment there. */
 function periodParts(key) {
   key = normalizePeriodKey(key);
   var i = key.indexOf(':');
@@ -600,6 +695,22 @@ function periodParts(key) {
   return { type: key.slice(0, i), offset: parseInt(key.slice(i + 1), 10) || 0 };
 }
 function periodKey(type, offset) { return type + ':' + offset; }
+/* Switching which period TYPE you're looking at (Week/Month/Quarter/FY) was
+   only ever kept in memory - reload the page (or open it fresh tomorrow)
+   and it silently fell back to Settings' "default period" (Month, unless
+   changed there), even if you'd deliberately been living in Week view.
+   Persisted here instead, same as any other setting, so the view you left
+   on is the view you come back to. Deliberately NOT done for prev/next
+   paging within a type (periodKey(pp.type, pp.offset +/- 1)) or "Jump to
+   current" - those are momentary look-backs, not a change of which lens
+   you use, and always resetting to THIS period on reload is the sensible
+   behaviour there. */
+function setPeriodType(type) {
+  state.period = periodKey(type, 0);
+  SETTINGS.defaultPeriod = state.period;
+  saveSettings();
+  fetchData();
+}
 function quarterStart(forDate) {
   var q = Math.floor(forDate.getUTCMonth() / 3) * 3;   /* 0, 3, 6, 9 - calendar quarters */
   return stamp(forDate.getUTCFullYear(), q + 1, 1);
@@ -705,7 +816,8 @@ var state = {
   data: null,                  /* last /api/metrics payload */
   fetchedAt: null,
   fetchError: null,
-  managerLoc: 'combined'       /* "Talking to" store picker on the Manager view - independent of SETTINGS.location */
+  managerLoc: 'combined',      /* "Talking to" store picker on the Manager view - independent of SETTINGS.location */
+  syncError: false             /* true when a save of your entered figures/settings couldn't reach the server - see queueAppStateSync */
 };
 
 /* Last N week-start dates (oldest first), ending at the current in-progress
@@ -1575,6 +1687,7 @@ function render() {
     root.appendChild(fb);
   }
   if (state.fetchError) root.appendChild(el('div', 'banner banner-coral', esc(state.fetchError)));
+  if (state.syncError) root.appendChild(el('div', 'banner banner-coral', 'Your entered figures and settings aren’t reaching your account right now — they’re only saved on this device until the connection is back, so they won’t show up on your phone or another browser yet. Check your connection, or try again shortly.'));
   if (!isManual() && state.data && state.data.protected === false) {
     var pwb = el('div', 'banner banner-coral');
     pwb.innerHTML = '<b>No password set yet.</b> Anyone with this link can see your numbers. Ask your AI to set a dashboard password.';
@@ -1640,7 +1753,7 @@ function renderDashboard(root) {
     var c = el('button', 'pchip' + (pp.type === pt.type ? ' on' : ''), pt.label);
     c.onclick = function () {
       if (pt.type === 'custom') { state.period = 'custom'; render(); return; }
-      state.period = periodKey(pt.type, 0); fetchData();
+      setPeriodType(pt.type);
     };
     left.appendChild(c);
   });
@@ -1996,7 +2109,7 @@ function renderManager(root) {
   left.appendChild(el('span', 'period-label', 'Period'));
   PERIOD_TYPES.filter(function (pt) { return pt.type !== 'custom'; }).forEach(function (pt) {
     var c = el('button', 'pchip' + (pp.type === pt.type ? ' on' : ''), pt.label);
-    c.onclick = function () { state.period = periodKey(pt.type, 0); fetchData(); };
+    c.onclick = function () { setPeriodType(pt.type); };
     left.appendChild(c);
   });
   var nav = el('div', 'period-nav');
@@ -2051,8 +2164,18 @@ function renderManager(root) {
   card.appendChild(head);
 
   CHOSEN.filter(function (k) { return MGR_HIDDEN_METRICS.indexOf(k) < 0 && (loc === 'combined' || shopMetrics.indexOf(k) >= 0); }).forEach(function (k) {
-    if (MGR_SPARK_METRICS.indexOf(k) >= 0) card.appendChild(managerSparkRowWithVal(k, loc, cur, prev, r));
-    else card.appendChild(managerMeterRow(k, cur));
+    if (MGR_SPARK_METRICS.indexOf(k) >= 0) {
+      card.appendChild(managerSparkRowWithVal(k, loc, cur, prev, r));
+    } else {
+      /* Target metrics (just Cost of goods, for managers - Wage/Overheads/
+         Profit stay owner-only via MGR_HIDDEN_METRICS) used to show only
+         the current-period meter - the history was one click away on the
+         main Dashboard card. Kane wants the trend sitting right here too,
+         so the meter (today's status against target) and the spark row
+         (recent history) both show without navigating anywhere. */
+      card.appendChild(managerMeterRow(k, cur));
+      card.appendChild(managerSparkRow(k, loc, r));
+    }
   });
   card.appendChild(managerDiscountRow(loc, cur));
   card.appendChild(managerSparkRow('discount', loc, r));
@@ -3813,6 +3936,7 @@ function renderSettings(root) {
 state.period = normalizePeriodKey(SETTINGS.defaultPeriod) || 'week:0';
 render();
 fetchData();
+fetchAppState();
 fetchIngredientPrices();
 fetchRecipes();
 fetchItemSales();
