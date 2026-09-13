@@ -550,6 +550,86 @@ function saveUber() { try { localStorage.setItem('vd_uber', JSON.stringify(UBER)
    be fixed from the dashboard instead of needing a code change + redeploy. */
 var SALES_ALIASES = loadJson('vd_salesaliases', {});
 function saveSalesAliases() { try { localStorage.setItem('vd_salesaliases', JSON.stringify(SALES_ALIASES)); } catch (e) {} queueAppStateSync(); }
+/* The same thing for Square MODIFIER names - the add-on / extra-patty /
+   make-it-a-combo options that are attached to a line item rather than sold
+   as their own catalog item ("ADD BACON", "double Patty", "Chips & Drink").
+   Kept as its own map, not merged into SALES_ALIASES, because a modifier and
+   a catalog item can share a name and legitimately point at different
+   recipes.
+   Unlike SALES_ALIASES this ships with DEFAULTS: these particular mappings
+   were hand-verified against the live Square account, so Kane shouldn't have
+   to re-match eighteen add-ons by hand on first load. They're only defaults -
+   anything he sets in the matcher overrides the seed and is what gets saved,
+   and the seed is never written back over a choice he's already made.
+   Deliberately NOT seeded (no sellable recipe exists, or the mapping is
+   genuinely ambiguous - so they stay in the normal unmatched pool for Kane
+   to decide): ADD LETTUCE / TOMATO / BEETROOT / ONION / JALAPENOS /
+   CARAMLISED ONION / LETTUCE BUN, ADD SMASHED BEEF PATTY and ADD DOUBLE
+   SMASHED BEEF PATTY (they overlap the Extra Patty list - which one he wants
+   counted is his call), and every Bun Type / Wings Sauce / Side Sauce /
+   Little Ones Drink / Milkshake Flavor choice (several similarly-named sauce
+   and drink recipes; guessing would misstate revenue). */
+var MODIFIER_ALIAS_DEFAULTS = {
+  'add bacon': 'bacon',
+  'add american cheese': 'cheese slice',
+  'add pineapple': 'pineapple',
+  'add pickles': 'pickles',
+  'add smashed avo': 'smashed avo',
+  'add halloumi': 'halloumi',
+  'add fried egg': 'egg',
+  'add grilled chicken': 'chicken breast',
+  'add fried chicken': 'chicken breast',
+  'double patty': 'double patty',
+  'triple patty': 'triple patty',
+  /* The $0 default option on the "Extra Patty" list - every burger carries
+     one, so it's a selection, not an upsell. Ignored rather than left
+     unmatched so it doesn't sit at the top of the matcher forever. */
+  'standard patty': '__ignore__',
+  'chips & drink': 'fries and drinks',
+  'say cheese loaded fries & drink': 'loaded say cheese combo',
+  'say cheese loaded spuds & drink': 'loaded say cheese combo',
+  'chicken potatoes loaded fries & drink': 'loaded combo chicken',
+  'chicken potatoes loaded spuds & drink': 'loaded combo chicken',
+  'cheeseburger potatoes loaded fries & drink': 'cheeseburger loaded combo',
+  'cheeseburger potatoes loaded spuds & drink': 'cheeseburger loaded combo',
+  'spicy potatoes loaded fries & drink': 'loaded spicy combo',
+  'spicy potatoes loaded spuds & drink': 'loaded spicy combo',
+  /* Not seen in the sample window, but the vego equivalent follows the same
+     naming pattern and has a real recipe, so it's ready if it ever sells. */
+  'vego loaded fries & drink': 'vego loaded combo',
+  'vego loaded spuds & drink': 'vego loaded combo'
+};
+var MODIFIER_ALIASES = loadJson('vd_modifieraliases', {});
+function saveModifierAliases() { try { localStorage.setItem('vd_modifieraliases', JSON.stringify(MODIFIER_ALIASES)); } catch (e) {} queueAppStateSync(); }
+/* Modifier names that are a customisation or a removal, never a billed
+   extra: they cost nothing separately and have no recipe, so surfacing them
+   as "not matched" would bury the handful of rows that DO need a decision
+   under permanent noise. Matched on the modifier NAME, because Square's
+   order payload doesn't carry the modifier-LIST name - a "CLASSIC DADDY
+   Removal" list is only ever visible as its chosen option, "NO TOMATO". The
+   list name is honoured as well if a payload ever does include one.
+   Anything genuinely uncertain is NOT put here: leaving it unmatched
+   surfaces it for Kane, whereas ignoring it would hide it forever. */
+var MODIFIER_IGNORE_NAMES = {
+  'bun type choice': 1, 'wings sauce choice': 1, 'side sauce': 1,
+  'little ones drink choice': 1, 'milkshake flavor choice': 1, 'milkshake flavour choice': 1
+};
+function isIgnorableModifier(sqKey, row) {
+  var name = String((row && row.name) || sqKey || '').trim().toLowerCase();
+  if (/^no\s/.test(name)) return true;             /* NO TOMATO, NO ONION, ... */
+  if (MODIFIER_IGNORE_NAMES[name]) return true;
+  var list = String((row && row.list) || '').toLowerCase();
+  if (list && list.indexOf('removal') >= 0) return true;
+  if (list && MODIFIER_IGNORE_NAMES[list]) return true;
+  return false;
+}
+/* The alias in force for a modifier: Kane's own choice wins, the verified
+   seed is the fallback. */
+function modifierAliasFor(sqKey) {
+  if (Object.prototype.hasOwnProperty.call(MODIFIER_ALIASES, sqKey)) return MODIFIER_ALIASES[sqKey];
+  if (Object.prototype.hasOwnProperty.call(MODIFIER_ALIAS_DEFAULTS, sqKey)) return MODIFIER_ALIAS_DEFAULTS[sqKey];
+  return undefined;
+}
 /* Ingredient key -> the price the dashboard last showed Kane (from the
    weekly supplier price check), so a COGS-moved flag fires once per real
    change rather than every reload - see maybeFlagPriceChanges(). */
@@ -581,7 +661,7 @@ function pushAppState() {
   appStateSyncing = true;
   fetch('/api/state', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ settings: SETTINGS, recon: RECON, orgOk: ORG_OK, manual: MANUAL, overrides: OVERRIDES, uber: UBER, salesAliases: SALES_ALIASES, priceSeen: PRICE_SEEN })
+    body: JSON.stringify({ settings: SETTINGS, recon: RECON, orgOk: ORG_OK, manual: MANUAL, overrides: OVERRIDES, uber: UBER, salesAliases: SALES_ALIASES, modifierAliases: MODIFIER_ALIASES, priceSeen: PRICE_SEEN })
   }).then(function (res) {
     appStateSyncing = false;
     if (!res.ok) throw new Error('save failed');
@@ -625,6 +705,7 @@ function fetchAppState() {
     if (d.overrides) { OVERRIDES = d.overrides; try { localStorage.setItem('vd_overrides', JSON.stringify(OVERRIDES)); } catch (e) {} }
     if (d.uber) { UBER = d.uber; try { localStorage.setItem('vd_uber', JSON.stringify(UBER)); } catch (e) {} }
     if (d.salesAliases) { SALES_ALIASES = d.salesAliases; try { localStorage.setItem('vd_salesaliases', JSON.stringify(SALES_ALIASES)); } catch (e) {} }
+    if (d.modifierAliases) { MODIFIER_ALIASES = d.modifierAliases; try { localStorage.setItem('vd_modifieraliases', JSON.stringify(MODIFIER_ALIASES)); } catch (e) {} }
     if (d.priceSeen) { PRICE_SEEN = d.priceSeen; try { localStorage.setItem('vd_priceseen', JSON.stringify(PRICE_SEEN)); } catch (e) {} }
     priceSeenReceived = true;
     maybeFlagPriceChanges();
@@ -1493,12 +1574,13 @@ var costingState = {
   itemNewName: '',          /* live value of the "add new menu item" name field */
 
   salesLoaded: false,       /* whether the first /api/recipe-sales fetch has returned */
-  salesData: null,          /* raw {from,to,days,byItem,connected} from /api/recipe-sales */
+  salesData: null,          /* raw {from,to,days,byItem,byModifier,connected} from /api/recipe-sales */
   salesPeriodDays: 84,      /* 12 weeks default - selector in the UI switches this */
   salesMonth: null,         /* 'YYYY-MM' when a specific calendar month is picked instead - overrides salesPeriodDays */
   salesCustomFrom: null,    /* 'YYYY-MM-DD' - a custom date range, set together with salesCustomTo. Wins over both the trailing-day buttons and the month picker when both dates are set. */
   salesCustomTo: null,      /* 'YYYY-MM-DD' */
   itemSort: 'revenue',      /* 'revenue' | 'qty' - how BOTH item tables ("Every menu item" and the simulator's) are ordered by popularity; shared so the two never disagree */
+  itemSearch: '',           /* live text filter for "Every menu item" (and the batch/sauces table below it) - find a dish fast instead of scrolling 60+ rows */
   salesError: null,
   simOverrides: {},         /* itemKey -> { cost: '<raw input string>'|null, sell: '<raw input string>'|null } - the Menu simulator's what-if layer. Never touches RECIPE_DATA - purely a scenario on top of it, so trying "what if I dropped the price 50c" never risks the real recipe/menu data. null/'' means "use current". */
 };
@@ -1634,6 +1716,40 @@ function resolveSquareKey(sqKey, itemsByKey) {
   return null;
 }
 
+/* The modifier equivalent. Same contract (null / '__ignore__' / recipe key)
+   so buildSalesMix can treat an add-on row exactly like an item row, with
+   two differences: it consults MODIFIER_ALIASES (falling back to the
+   hand-verified MODIFIER_ALIAS_DEFAULTS seed) rather than SALES_ALIASES, and
+   a removal/customisation option auto-ignores itself - unless Kane has
+   explicitly aliased it to something, in which case his decision wins. */
+function resolveModifierKey(sqKey, row, itemsByKey) {
+  var alias = modifierAliasFor(sqKey);
+  if (alias === '__ignore__') return '__ignore__';
+  if (alias && itemsByKey[alias]) return alias;
+  if (alias == null && isIgnorableModifier(sqKey, row)) return '__ignore__';
+  if (itemsByKey[sqKey]) return sqKey;
+  return null;
+}
+
+/* Every Square row that feeds the sales mix, item and modifier alike, each
+   tagged with where it came from. Modifier rows carry their own resolver, so
+   the caller doesn't have to branch on source to work out what a row is.
+   Deliberately ONE list: a recipe key that gets sales from both sides (a
+   "pineapple" catalog item AND "ADD PINEAPPLE" as a modifier) has to end up
+   as one line in the mix, not two competing ones. */
+function squareSourceRows(sd, itemsByKey) {
+  var out = [];
+  Object.keys((sd && sd.byItem) || {}).forEach(function (sqKey) {
+    var row = sd.byItem[sqKey];
+    out.push({ sqKey: sqKey, row: row, source: 'item', resolved: resolveSquareKey(sqKey, itemsByKey) });
+  });
+  Object.keys((sd && sd.byModifier) || {}).forEach(function (sqKey) {
+    var row = sd.byModifier[sqKey];
+    out.push({ sqKey: sqKey, row: row, source: 'modifier', resolved: resolveModifierKey(sqKey, row, itemsByKey) });
+  });
+  return out;
+}
+
 /* Matches each Square line-item name (lowercased, trimmed) to a recipe,
    via SALES_ALIASES first and an exact key match second - see
    resolveSquareKey(). Anything still unresolved is surfaced in "unmatched"
@@ -1655,29 +1771,39 @@ function buildSalesMix(report) {
   var matchedRevenue = 0;
   var ignoredQty = 0, ignoredRevenue = 0, ignoredCount = 0;
 
-  Object.keys(sd.byItem).forEach(function (sqKey) {
-    var row = sd.byItem[sqKey];
-    var resolved = resolveSquareKey(sqKey, itemsByKey);
+  var modifierQty = 0, modifierRevenue = 0;
+
+  squareSourceRows(sd, itemsByKey).forEach(function (src) {
+    var sqKey = src.sqKey, row = src.row, resolved = src.resolved;
     if (resolved === '__ignore__') {
       /* Deliberately excluded from the totals too, not just from the matched
          list - counting it in totalRevenue would make matched-revenue
          coverage look permanently incomplete for something Kane has already
-         said isn't a menu item. */
+         said isn't a menu item (or, for a modifier, a removal/choice that was
+         never billed separately in the first place). */
       ignoredQty += row.qty; ignoredRevenue += row.gross; ignoredCount++;
       return;
     }
+    /* Modifier gross is ADDED here, never substituted for item gross: Square
+       reports a line item's gross_sales_money EXCLUDING its modifiers'
+       prices, so the two buckets are disjoint and summing them is the whole
+       revenue, not a double count. See the long note in worker.js's
+       squareItemSalesTallyDates - that assumption is what makes this line
+       correct. */
     totalRevenue += row.gross;
+    if (src.source === 'modifier') { modifierQty += row.qty; modifierRevenue += row.gross; }
     var it = resolved ? itemsByKey[resolved] : null;
-    /* sqKey carried through so the alias editor can point straight at the
-       Square row that needs fixing, not just its display name. */
-    if (!it) { unmatched.push({ sqKey: sqKey, name: row.name, qty: row.qty, revenue: row.gross }); return; }
+    /* sqKey + source carried through so the alias editor can point straight
+       at the Square row that needs fixing, not just its display name, and
+       can tell an add-on row from a catalog-item row. */
+    if (!it) { unmatched.push({ sqKey: sqKey, name: row.name, qty: row.qty, revenue: row.gross, source: src.source }); return; }
     var foodCost = it.cost * row.qty;
     totalQty += row.qty;
     totalFoodCost += foodCost;
     matchedRevenue += row.gross;
     var agg = byRecipe[it.key];
     if (!agg) {
-      agg = { key: it.key, display: it.display, qty: 0, revenue: 0, foodCost: 0, sqKeys: [] };
+      agg = { key: it.key, display: it.display, qty: 0, revenue: 0, foodCost: 0, sqKeys: [], sources: [], hasItem: false, hasModifier: false };
       byRecipe[it.key] = agg;
       matched.push(agg);
     }
@@ -1685,6 +1811,8 @@ function buildSalesMix(report) {
     agg.revenue += row.gross;
     agg.foodCost += foodCost;
     agg.sqKeys.push(sqKey);
+    agg.sources.push({ sqKey: sqKey, source: src.source, qty: row.qty, revenue: row.gross });
+    if (src.source === 'modifier') agg.hasModifier = true; else agg.hasItem = true;
   });
 
   matched.forEach(function (m) {
@@ -1700,6 +1828,10 @@ function buildSalesMix(report) {
     totalQty: totalQty, totalRevenue: totalRevenue, matchedRevenue: matchedRevenue,
     totalFoodCost: totalFoodCost,
     ignoredCount: ignoredCount, ignoredQty: ignoredQty, ignoredRevenue: ignoredRevenue,
+    /* How much of the above came from add-on/combo modifiers rather than
+       catalog items - for the summary copy, and so a future reader can tell
+       at a glance whether modifier sales are landing at all. */
+    modifierQty: modifierQty, modifierRevenue: modifierRevenue,
     actualCogsPct: matchedRevenue > 0 ? (totalFoodCost / matchedRevenue * 100) : null,
     matchedRevenueSharePct: totalRevenue > 0 ? (matchedRevenue / totalRevenue * 100) : null,
   };
@@ -1716,22 +1848,29 @@ function allSquareRows(report) {
   if (!sd || !sd.byItem) return [];
   var itemsByKey = {};
   report.items.forEach(function (it) { itemsByKey[it.key] = it; });
-  var rows = Object.keys(sd.byItem).map(function (sqKey) {
-    var row = sd.byItem[sqKey];
-    var alias = SALES_ALIASES[sqKey];
-    var resolved = resolveSquareKey(sqKey, itemsByKey);
+  var rows = [];
+  squareSourceRows(sd, itemsByKey).forEach(function (src) {
+    var sqKey = src.sqKey, row = src.row, resolved = src.resolved;
+    var isMod = src.source === 'modifier';
+    var alias = isMod ? modifierAliasFor(sqKey) : SALES_ALIASES[sqKey];
+    /* A removal ("NO TOMATO") or a pure customisation choice is never shown
+       here at all unless Kane has deliberately aliased it: it isn't a
+       decision he needs to make, and a couple of hundred of them would bury
+       the rows that are. */
+    if (isMod && alias == null && isIgnorableModifier(sqKey, row)) return;
     var status;
     if (resolved === '__ignore__') status = 'ignored';
     else if (!resolved) status = 'unresolved';
     else if (alias) status = 'alias';
     else status = 'exact';
-    return {
+    rows.push({
       sqKey: sqKey, name: row.name, qty: row.qty, revenue: row.gross,
+      source: src.source,
       alias: (alias != null ? alias : null),
       resolvedKey: (resolved && resolved !== '__ignore__') ? resolved : null,
       resolvedDisplay: (resolved && resolved !== '__ignore__' && itemsByKey[resolved]) ? itemsByKey[resolved].display : null,
       status: status,
-    };
+    });
   });
   rows.sort(function (a, b) {
     var au = a.status === 'unresolved' ? 0 : 1, bu = b.status === 'unresolved' ? 0 : 1;
@@ -3092,6 +3231,25 @@ function costingPctClass(pct) {
   if (pct > 27) return 'warn';
   return 'good';
 }
+/* Every name an ingredient LINE could resolve to - every raw ingredient plus
+   every other recipe usable as a sub-recipe (a sauce inside a burger) -
+   for the type-ahead <datalist> on the ingredient line inputs. Excludes the
+   item's own key so it doesn't suggest referencing itself. Sorted so the
+   dropdown reads alphabetically rather than in object-insertion order. */
+function ingredientOptionNames(excludeKey) {
+  var seen = {};
+  var out = [];
+  function add(key, rec) {
+    if (key === excludeKey || seen[key]) return;
+    seen[key] = true;
+    out.push(rec && rec.display ? rec.display : key);
+  }
+  Object.keys(RECIPE_DATA.raw).forEach(function (k) { add(k, RECIPE_DATA.raw[k]); });
+  Object.keys(RECIPE_DATA.recipes).forEach(function (k) { add(k, RECIPE_DATA.recipes[k]); });
+  out.sort(function (a, b) { return a.localeCompare(b); });
+  return out;
+}
+
 function costingLineKindTag(recipeKey, ingredientName) {
   var kind = inferLineKind(recipeKey, ingredientName);
   if (kind === 'raw') return '<span class="cost-tag">raw ingredient</span>';
@@ -3338,6 +3496,17 @@ function renderSalesMix(root, report) {
     + (mix.actualCogsPct != null ? '<b class="' + costingPctClass(mix.actualCogsPct) + '">' + mix.actualCogsPct.toFixed(1) + '%</b> of revenue for matched items' : 'no matched items yet')
     + (report.overallPct != null ? ' (vs ' + report.overallPct.toFixed(1) + '% theoretical menu average).' : '.');
   card.appendChild(el('div', 'recon-inst', summaryLine));
+  /* Add-ons, extra patties and the make-it-a-combo upsell live in Square as
+     MODIFIERS on a line item, not as their own catalog items - they used to
+     be missing from this section entirely. They're now counted, and because
+     Square prices a modifier separately from the item it's attached to, their
+     revenue adds to the item revenue rather than overlapping it. */
+  card.appendChild(el('div', 'recon-inst',
+    'Add-on, extra-patty and "make it a combo" sales are included here too - they’re modifiers in Square rather than separate menu buttons, and their revenue adds on top of the item they were ordered with.'
+    + (mix.modifierRevenue > 0
+      ? ' In this period that’s <b>' + fmtMoney(mix.modifierRevenue, true) + '</b> across ' + (mix.modifierQty % 1 === 0 ? mix.modifierQty : mix.modifierQty.toFixed(1)) + ' add-ons.'
+      : ' None have come through for this period yet.')
+    + ' Removals ("no tomato") and free choices like bun or sauce selections are left out - nothing extra was billed for them.'));
   if (mix.matchedRevenueSharePct != null) {
     card.appendChild(el('div', 'recon-inst',
       mix.matchedRevenueSharePct.toFixed(0) + '% of Square revenue in this period matched to a recipe here; the rest is listed as "not matched" below - usually a naming difference between Square and the recipe name, which you can fix yourself in "Match Square sales to menu items".'
@@ -3410,7 +3579,7 @@ function renderSalesAliasEditor(report) {
   wrap.appendChild(sum);
 
   wrap.appendChild(el('div', 'recon-inst',
-    'One row per item name Square sold in this period. Pick the menu item it really is, or mark it "Not a menu item" for things like a tip, a bag charge or a one-off special you don’t cost - those are then left out of the sales-mix numbers entirely instead of sitting here as a permanent gap. Changes save straight away.'));
+    'One row per item name Square sold in this period, plus every add-on, extra patty and "make it a combo" upsell (tagged <b>(add-on)</b> - those are modifiers in Square, not separate menu buttons). Pick the menu item it really is, or mark it "Not a menu item" for things like a tip, a bag charge or a one-off special you don’t cost - those are then left out of the sales-mix numbers entirely instead of sitting here as a permanent gap. Removals ("no tomato") and free bun/sauce/drink choices aren’t listed at all: nothing extra was billed for them. Changes save straight away.'));
 
   if (!rows.length) {
     wrap.appendChild(el('div', 'recon-inst', 'No Square item sales in this period yet.'));
@@ -3436,6 +3605,9 @@ function renderSalesAliasEditor(report) {
     var row = el('div', 'cost-row' + (r.status === 'unresolved' ? ' cost-row-over' : ''));
     var nameCell = el('span', 'cost-col-name');
     nameCell.innerHTML = esc(r.name)
+      /* An add-on/combo modifier can share a name with a catalog item and
+         still be a different thing, so say which one this row is. */
+      + (r.source === 'modifier' ? ' <span class="cost-tag">(add-on)</span>' : '')
       + (r.status === 'exact' ? ' <span class="cost-tag">name matches</span>' : '')
       + (r.status === 'alias' ? ' <span class="cost-tag">matched by you</span>' : '')
       + (r.status === 'ignored' ? ' <span class="cost-tag">not a menu item</span>' : '')
@@ -3462,13 +3634,23 @@ function renderSalesAliasEditor(report) {
        - picking the same value again is then a no-op, and clearing it back
        to "not matched" can't fight the exact match that would re-apply. */
     sel.value = (r.alias != null) ? r.alias : (r.resolvedKey || '');
-    sel.onchange = (function (sqKey) { return function () {
+    sel.onchange = (function (sqKey, source) { return function () {
       var v = this.value;
-      if (!v) delete SALES_ALIASES[sqKey];
-      else SALES_ALIASES[sqKey] = v;
-      saveSalesAliases();
+      if (source === 'modifier') {
+        /* Clearing back to "not matched" has to WRITE an explicit empty
+           choice rather than just delete the key, otherwise the shipped
+           MODIFIER_ALIAS_DEFAULTS seed would immediately re-apply and Kane's
+           unmatch would look like it didn't save. */
+        if (!v) MODIFIER_ALIASES[sqKey] = '';
+        else MODIFIER_ALIASES[sqKey] = v;
+        saveModifierAliases();
+      } else {
+        if (!v) delete SALES_ALIASES[sqKey];
+        else SALES_ALIASES[sqKey] = v;
+        saveSalesAliases();
+      }
       render();
-    }; })(r.sqKey);
+    }; })(r.sqKey, r.source);
     selCell.appendChild(sel);
     row.appendChild(selCell);
     table.appendChild(row);
@@ -3830,12 +4012,26 @@ function renderItemEditPanel(key) {
   panel.appendChild(fieldsRow);
 
   /* ---- Ingredient lines ---- */
-  panel.appendChild(el('div', 'recon-inst', 'Each line shows what it resolved to - a plain ingredient, another recipe used as an ingredient (a sauce inside a burger, say), or "not found" if the name doesn’t match anything in Ingredient prices yet.'));
+  panel.appendChild(el('div', 'recon-inst', 'Each line shows what it resolved to - a plain ingredient, another recipe used as an ingredient (a sauce inside a burger, say), or "not found" if the name doesn’t match anything in Ingredient prices yet. Start typing a name and pick it from the list, or use the dropdown arrow to browse everything available.'));
+  /* One shared type-ahead list for every ingredient-line input on this panel -
+     start typing (e.g. "beef mince") and the browser narrows the list to a
+     match, or click the input's dropdown arrow to browse the whole thing. */
+  var ingListId = 'ing-datalist-' + key.replace(/[^a-z0-9]/g, '-');
+  var ingDatalist = document.createElement('datalist');
+  ingDatalist.id = ingListId;
+  ingredientOptionNames(key).forEach(function (name) {
+    var opt = document.createElement('option');
+    opt.value = name;
+    ingDatalist.appendChild(opt);
+  });
+  panel.appendChild(ingDatalist);
   var linesTable = el('div', 'cost-table');
   rec.lines.forEach(function (line, idx) {
     var lrow = el('div', 'cost-row-batch');
     var ingInp = document.createElement('input');
     ingInp.type = 'text'; ingInp.className = 'cost-inp-wide'; ingInp.value = line.ingredient;
+    ingInp.setAttribute('list', ingListId);
+    ingInp.placeholder = 'Start typing an ingredient…';
     /* Patches just the tag rather than re-rendering, so typing an ingredient
        name doesn't lose the cursor on every keystroke. */
     ingInp.oninput = function () { line.ingredient = ingInp.value; tagSpan.innerHTML = costingLineKindTag(key, ingInp.value); };
@@ -4025,7 +4221,7 @@ function renderCosting(root) {
 
   var note = el('div', 'recon-card fade-in');
   note.appendChild(el('div', 'recon-inst',
-    '<b>Why this won’t exactly match your actual COGS%.</b> Two structural reasons, both by design: (1) this counts every raw ingredient at true cost, including Windsor Farm Shop veg you pay cash for and which never appears in your actual COGS/workbook figures - so theoretical will always run a bit above actual’s "missing" cash spend, in the other direction. (2) this is an equal-weighted average across the menu, not weighted by how many of each item you actually sell - a highly-discounted-margin item selling in huge volume moves your real COGS% more than it moves this average. The "Real sales mix" section below fixes (2) using your actual Square sales.'
+    '<b>Why this won’t exactly match your actual COGS%.</b> Two structural reasons, both by design: (1) this counts every raw ingredient at true cost, including Windsor Farm Shop veg you pay cash for and which never appears in your actual COGS/workbook figures - so theoretical will always run a bit above actual’s "missing" cash spend, in the other direction. (2) this is an equal-weighted average across the menu, not weighted by how many of each item you actually sell - a highly-discounted-margin item selling in huge volume moves your real COGS% more than it moves this average. The "Real sales mix" section below fixes (2) using your actual Square sales - including add-on, extra-patty and combo upsells, which are modifiers in Square rather than separate menu buttons.'
   ));
   root.appendChild(note);
 
@@ -4060,6 +4256,22 @@ function renderCosting(root) {
   itemsHead.appendChild(itemSortToggle());
   tableCard.appendChild(itemsHead);
   tableCard.appendChild(el('div', 'recon-inst', 'Sorted by what actually sells - ' + (costingState.itemSort === 'qty' ? 'most sold first' : 'biggest earners first') + ', using the same Square period as "Real sales mix" above; items with no sales in that period sit at the bottom. Items above the 30% target are flagged. <b>Click any item</b> to change its ingredients, portion sizes or sell price.'));
+  /* Find-as-you-type filter - matches this table AND the batch/sauces one
+     below it, since both are the same "browse the menu" job and sharing one
+     box means Kane doesn't have to remember which table a sauce landed in.
+     Filters by hiding/showing rows already built rather than a full render()
+     on every keystroke, so the search box itself never loses focus mid-type -
+     the same fix already applied to the simulator's live-typing inputs. */
+  var searchWrap = el('div', 'conn-actions');
+  var searchInp = document.createElement('input');
+  searchInp.type = 'search'; searchInp.className = 'cost-inp-wide';
+  searchInp.placeholder = 'Find an item…';
+  searchInp.value = costingState.itemSearch;
+  searchInp.oninput = function () { costingState.itemSearch = searchInp.value; applyItemSearchFilter(); };
+  searchWrap.appendChild(searchInp);
+  tableCard.appendChild(searchWrap);
+  var noMatchMsg = el('div', 'recon-inst', 'No item matches that search.');
+  noMatchMsg.hidden = true;
   var table = el('div', 'cost-table cost-table-items');
   var thead = el('div', 'cost-row cost-row-head');
   thead.appendChild(el('span', 'cost-col-name', 'Item'));
@@ -4084,9 +4296,11 @@ function renderCosting(root) {
   sortByPopularity(sellableItems, function (it) { return salesByKey[it.key]; });
   var batchItems = report.items.filter(function (it) { return !it.inRollup; });
 
+  var itemWraps = []; /* {wrap, name, key} - what applyItemSearchFilter() shows/hides */
   sellableItems.forEach(function (it) {
     var sold = salesByKey[it.key];
     var open = costingState.openItemKey === it.key;
+    var wrap = document.createElement('div');
     var row = el('div', 'cost-row cost-row-click' + (it.overTarget ? ' cost-row-over' : '') + (open ? ' cost-row-open' : ''));
     var nameCell = el('span', 'cost-col-name');
     nameCell.innerHTML = esc(it.display) + (it.sellSource === 'sheet' ? ' <span class="cost-tag">no current menu price</span>' : '');
@@ -4114,10 +4328,13 @@ function renderCosting(root) {
       }
       render();
     }; })(it.key);
-    table.appendChild(row);
-    if (open) table.appendChild(renderItemEditPanel(it.key));
+    wrap.appendChild(row);
+    if (open) wrap.appendChild(renderItemEditPanel(it.key));
+    table.appendChild(wrap);
+    itemWraps.push({ wrap: wrap, name: it.display.toLowerCase(), key: it.key });
   });
   tableCard.appendChild(table);
+  tableCard.appendChild(noMatchMsg);
 
   /* ---- Add a whole new menu item ---- */
   var addRow = el('div', 'conn-actions');
@@ -4151,8 +4368,10 @@ function renderCosting(root) {
     batchCard.appendChild(el('div', 'recon-metric', 'Batch sauces and prep (not sold on their own)'));
     batchCard.appendChild(el('div', 'recon-inst', 'Cost per batch, at current ingredient prices - these feed into the dishes above and aren’t counted in the overall COGS% themselves. Click one to edit it.'));
     var bTable = el('div', 'cost-table');
+    var batchWraps = []; /* same shape as itemWraps, so applyItemSearchFilter() covers both tables */
     batchItems.sort(function (a, b) { return a.display.localeCompare(b.display); }).forEach(function (it) {
       var bOpen = costingState.openItemKey === it.key;
+      var bWrap = document.createElement('div');
       var row = el('div', 'cost-row-batch cost-row-click' + (bOpen ? ' cost-row-open' : ''));
       row.appendChild(el('span', 'cost-col-name', esc(it.display)));
       row.appendChild(el('span', 'cost-col-num', fmtMoney(it.batchTotal, true) + ' / batch (' + it.portions + ' serves, ' + fmtMoney(it.cost, true) + ' each)'));
@@ -4168,12 +4387,35 @@ function renderCosting(root) {
         }
         render();
       }; })(it.key);
-      bTable.appendChild(row);
-      if (bOpen) bTable.appendChild(renderItemEditPanel(it.key));
+      bWrap.appendChild(row);
+      if (bOpen) bWrap.appendChild(renderItemEditPanel(it.key));
+      bTable.appendChild(bWrap);
+      batchWraps.push({ wrap: bWrap, name: it.display.toLowerCase(), key: it.key });
     });
     batchCard.appendChild(bTable);
     root.appendChild(batchCard);
   }
+
+  /* Shows/hides already-built rows in both tables above rather than
+     re-rendering, so the search box never loses focus mid-keystroke. Keeps
+     whichever item's panel is currently open visible regardless of the
+     search text, so typing never yanks away the thing being edited. */
+  function applyItemSearchFilter() {
+    var q = costingState.itemSearch.trim().toLowerCase();
+    var anyShown = false;
+    itemWraps.forEach(function (w) {
+      var show = !q || w.name.indexOf(q) >= 0 || w.key === costingState.openItemKey;
+      w.wrap.hidden = !show;
+      if (show) anyShown = true;
+    });
+    noMatchMsg.hidden = anyShown;
+    if (typeof batchWraps !== 'undefined') {
+      batchWraps.forEach(function (w) {
+        w.wrap.hidden = !(!q || w.name.indexOf(q) >= 0 || w.key === costingState.openItemKey);
+      });
+    }
+  }
+  applyItemSearchFilter();
 
   /* ---- Ingredient prices, folded in here ----
      Was its own top-level tab, but it's raw ingredient cost - the thing that
@@ -4217,7 +4459,8 @@ function renderCosting(root) {
     '<ul style="margin:0.3rem 0 0 1.1rem; padding:0;">'
     + '<li>Eggs: priced at the preferred 600g/$65 carton. When City Fine Food substitutes the 700g/$85 carton (out-of-stock), actual cost runs a little higher than shown here - not modelled per-week.</li>'
     + '<li>Avocado: Windsor Farm Shop prices by the tray with no printed count; using an estimated 5kg tray (~25 avocados at the ~200g you weighed) - update this if you get an exact count.</li>'
-    + '<li>"Caramelised onion" is a $1 menu add-on with no ingredient recipe in the costing sheet at all, so it isn’t costed here.</li>'
+    + '<li>"Caramelised onion" is a $1 menu add-on with no ingredient recipe in the costing sheet at all, so it isn’t costed here - it now shows up in the sales-mix matcher as an unmatched add-on until a recipe exists for it. Same for the salad extras (lettuce, tomato, beetroot, onion, jalapenos, lettuce bun).</li>'
+    + '<li>Add-ons, extra patties and "make it a combo" upsells are modifiers in Square, not separate menu buttons, and are now counted in the sales mix. Square prices them separately from the item they’re attached to, so their revenue is added on top rather than already being inside the item’s. Sauce, bun, drink and milkshake-flavour choices are left out - several similarly-named recipes, and nothing extra was billed for the choice itself - so pick those yourself in the matcher if you want them counted.</li>'
     + '<li>"Bacon & egg burger" rarely sells and isn’t on the printed menu - shown at its last known sell price rather than a current one.</li>'
     + '<li>Ingredient prices are the ones saved to this dashboard (the recipe sheet’s originals, plus anything you’ve changed on Ingredient prices). The weekly supplier price check doesn’t feed into here yet - when it does, this tab will say when it last landed.</li>'
     + '<li>The main table above is still an equal-weighted menu average (every dish counted once). The "Real sales mix" section above is the sales-weighted version, from your actual Square sales - use that one for "what\'s really driving my food cost".</li>'
