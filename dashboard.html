@@ -1284,6 +1284,44 @@ function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
 var RECIPE_DATA = deepClone(RECIPE_DATA_DEFAULT);
 var recipeDataState = { source: 'default', updatedAt: null, loaded: false };
 
+/* Kane's Sept 2026 printed-menu price update. Recipe data has been editable
+   from this dashboard for a while now, and once anything is saved from the
+   editor the SERVER copy (fetched by fetchRecipes(), below) permanently wins
+   over whatever's baked into RECIPE_DATA_DEFAULT above - so just changing a
+   default price in this file does nothing for a store that already has a
+   saved /api/recipes document, which is exactly why the first attempt at
+   this update silently didn't show up live. This map + the banner in
+   renderCosting() apply the same prices directly to whatever's live right
+   now (server-saved or still-default) and push it with a real save, so it
+   actually takes effect regardless of source. Delete a line here once it's
+   been applied and confirmed - this isn't meant to keep re-asserting a price
+   forever, just to land this one batch of changes. */
+var MENU_PRICE_UPDATE_SEPT2026 = {
+  'cheese burger': 14.20, 'hefty burger': 14.20, 'classic daddy': 18.20,
+  'lot burger': 19.20, 'hallulu': 18.20, 'thick chick': 23.20,
+  'fit chick': 18.20, 'spicy chick': 18.20, 'cheeky chick': 18.20,
+  'spicy potatoes large': 18, 'chicken potato large': 21,
+  'triple patty': 9,
+  'cheese burger little ones': 15.50, 'chicken tenders little ones': 15.50,
+  'coca-cola': 3.50, 'coke zero': 3.50, 'creaming soda': 3.50, 'fanta': 3.50,
+  'pasito': 3.50, 'sprite': 3.50, 'water': 3.50, 'sparkling water': 5,
+  "kid's apple & blackcurrant juice": 3, "kid's apple juice": 3, 'milkshakes': 7.50,
+};
+/* Items in the map above whose CURRENT sell price (whatever RECIPE_DATA
+   holds right now, server-saved or default) doesn't match the target yet -
+   what the banner shows and what "Apply" actually changes. */
+function pendingMenuPriceUpdates() {
+  var out = [];
+  Object.keys(MENU_PRICE_UPDATE_SEPT2026).forEach(function (key) {
+    var rec = RECIPE_DATA.recipes[key];
+    var target = MENU_PRICE_UPDATE_SEPT2026[key];
+    if (rec && Number(rec.sellPrice) !== Number(target)) {
+      out.push({ key: key, display: rec.display, from: rec.sellPrice, to: target });
+    }
+  });
+  return out;
+}
+
 function fetchRecipes() {
   fetch('/api/recipes').then(function (res) {
     return res.ok ? res.json() : null;
@@ -1433,6 +1471,8 @@ var costingState = {
   overridesUpdatedAt: null,
   overridesLoaded: false,
   priceChangeFlags: [], /* [{key,display,oldPct,newPct}] - items whose COGS% moved since PRICE_SEEN, see maybeFlagPriceChanges() */
+  priceUpdateSaving: false,   /* true while the Sept 2026 menu-price migration banner's Apply button is saving */
+  priceUpdateProblems: [],    /* validation errors from that save, if any */
 
   /* Ingredient library ("Ingredients" tab) - its own small edit surface,
      separate from menu-item editing below since Kane wants ingredient
@@ -1858,7 +1898,7 @@ function buildCostingReport() {
 
 /* ---------- "Your COGS moved" flagging ----------
    Ingredient prices can change under Kane's feet - a correction typed on
-   the Ingredients tab from his phone, or (once the weekly supplier price
+   Ingredient prices from his phone, or (once the weekly supplier price
    check is wired to post into /api/ingredient-prices, which it is NOT yet)
    a supplier update landing on its own - which
    means a menu item's theoretical COGS% can quietly move between one time
@@ -3790,7 +3830,7 @@ function renderItemEditPanel(key) {
   panel.appendChild(fieldsRow);
 
   /* ---- Ingredient lines ---- */
-  panel.appendChild(el('div', 'recon-inst', 'Each line shows what it resolved to - a plain ingredient, another recipe used as an ingredient (a sauce inside a burger, say), or "not found" if the name doesn’t match anything in the Ingredients tab yet.'));
+  panel.appendChild(el('div', 'recon-inst', 'Each line shows what it resolved to - a plain ingredient, another recipe used as an ingredient (a sauce inside a burger, say), or "not found" if the name doesn’t match anything in Ingredient prices yet.'));
   var linesTable = el('div', 'cost-table');
   rec.lines.forEach(function (line, idx) {
     var lrow = el('div', 'cost-row-batch');
@@ -3870,9 +3910,59 @@ function renderCosting(root) {
   root.appendChild(el('div', 'screen-title', 'Recipe costing'));
   root.appendChild(el('p', 'screen-sub',
     'Theoretical cost and Cost-of-goods % for every menu item, worked out from ingredient quantities × the ingredient prices saved here - not what you actually spent, what the menu SHOULD cost if every dish were made exactly to spec with zero waste. '
-    + 'Click any item in the table below to change what goes into it or what you charge for it; raw ingredient prices and pack sizes live on the <b>Ingredients</b> tab.'));
+    + 'Click any item in the table below to change what goes into it or what you charge for it; raw ingredient prices and pack sizes live in the <b>Ingredient prices</b> section below.'));
 
   var report = buildCostingReport();
+
+  /* ---- Sept 2026 menu price update, not applied yet ----
+     Once anything's been saved from this editor, the server copy wins over
+     RECIPE_DATA_DEFAULT permanently - so a price update baked into this file
+     alone never lands for a store that already has saved recipes. This
+     banner shows itself only while any of the updated items still differ
+     from the printed menu, and disappears the moment Apply saves them. */
+  var pendingPrices = pendingMenuPriceUpdates();
+  if (pendingPrices.length) {
+    var priceCard = el('div', 'recon-card fade-in banner-amber-card');
+    var pHead = el('div', 'recon-head');
+    pHead.appendChild(el('span', 'recon-metric', 'New menu prices not applied yet'));
+    var applyBtn = el('button', 'btn-small', costingState.priceUpdateSaving ? 'Applying…' : 'Apply new prices');
+    applyBtn.disabled = costingState.priceUpdateSaving;
+    applyBtn.onclick = function () {
+      pendingMenuPriceUpdates().forEach(function (p) { RECIPE_DATA.recipes[p.key].sellPrice = p.to; });
+      costingState.priceUpdateSaving = true; render();
+      saveRecipeData(function (problems) {
+        costingState.priceUpdateSaving = false;
+        costingState.priceUpdateProblems = problems;
+        render();
+      });
+    };
+    pHead.appendChild(applyBtn);
+    priceCard.appendChild(pHead);
+    priceCard.appendChild(el('div', 'recon-inst',
+      pendingPrices.length + ' item' + (pendingPrices.length === 1 ? '' : 's') + ' still show the old sell price saved here, not what’s on your current printed menu - saving a recipe edit from this tab before always locks in whatever was live at the time, over any later change to the built-in defaults. Apply pushes the printed-menu prices below straight to the live data.'));
+    if (costingState.priceUpdateProblems.length) {
+      var pProbBox = el('div', 'diag');
+      pProbBox.innerHTML = '<b>Couldn’t apply:</b><ul style="margin:0.3rem 0 0 1.1rem; padding:0;">'
+        + costingState.priceUpdateProblems.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('')
+        + '</ul>';
+      priceCard.appendChild(pProbBox);
+    }
+    var pTable = el('div', 'cost-table');
+    var pHeadRow = el('div', 'cost-row cost-row-head');
+    pHeadRow.appendChild(el('span', 'cost-col-name', 'Item'));
+    pHeadRow.appendChild(el('span', 'cost-col-num', 'Now'));
+    pHeadRow.appendChild(el('span', 'cost-col-num', 'New'));
+    pTable.appendChild(pHeadRow);
+    pendingPrices.forEach(function (p) {
+      var row = el('div', 'cost-row');
+      row.appendChild(el('span', 'cost-col-name', esc(p.display)));
+      row.appendChild(el('span', 'cost-col-num', p.from != null ? fmtMoney(p.from, true) : '—'));
+      row.appendChild(el('span', 'cost-col-num', fmtMoney(p.to, true)));
+      pTable.appendChild(row);
+    });
+    priceCard.appendChild(pTable);
+    root.appendChild(priceCard);
+  }
 
   /* ---- "Your COGS moved" flags ----
      A supplier price change can move an item's COGS% between one visit and
@@ -3916,7 +4006,7 @@ function renderCosting(root) {
   if (costingState.overridesUpdatedAt) {
     updatedNote = 'Ingredient prices last updated ' + new Date(costingState.overridesUpdatedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) + '.';
   } else if (costingState.overridesLoaded) {
-    updatedNote = 'No price update has been posted to the dashboard yet - showing the prices baked in when this tab was built, plus anything you’ve changed on the Ingredients tab.';
+    updatedNote = 'No price update has been posted to the dashboard yet - showing the prices baked in when this tab was built, plus anything you’ve changed on Ingredient prices.';
   } else {
     updatedNote = 'Loading the latest ingredient prices…';
   }
@@ -4129,7 +4219,7 @@ function renderCosting(root) {
     + '<li>Avocado: Windsor Farm Shop prices by the tray with no printed count; using an estimated 5kg tray (~25 avocados at the ~200g you weighed) - update this if you get an exact count.</li>'
     + '<li>"Caramelised onion" is a $1 menu add-on with no ingredient recipe in the costing sheet at all, so it isn’t costed here.</li>'
     + '<li>"Bacon & egg burger" rarely sells and isn’t on the printed menu - shown at its last known sell price rather than a current one.</li>'
-    + '<li>Ingredient prices are the ones saved to this dashboard (the recipe sheet’s originals, plus anything you’ve changed on the Ingredients tab). The weekly supplier price check doesn’t feed into here yet - when it does, this tab will say when it last landed.</li>'
+    + '<li>Ingredient prices are the ones saved to this dashboard (the recipe sheet’s originals, plus anything you’ve changed on Ingredient prices). The weekly supplier price check doesn’t feed into here yet - when it does, this tab will say when it last landed.</li>'
     + '<li>The main table above is still an equal-weighted menu average (every dish counted once). The "Real sales mix" section above is the sales-weighted version, from your actual Square sales - use that one for "what\'s really driving my food cost".</li>'
     + '</ul>'
   ));
