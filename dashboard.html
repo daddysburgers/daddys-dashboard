@@ -1456,6 +1456,8 @@ var costingState = {
   salesData: null,          /* raw {from,to,days,byItem,connected} from /api/recipe-sales */
   salesPeriodDays: 84,      /* 12 weeks default - selector in the UI switches this */
   salesMonth: null,         /* 'YYYY-MM' when a specific calendar month is picked instead - overrides salesPeriodDays */
+  salesCustomFrom: null,    /* 'YYYY-MM-DD' - a custom date range, set together with salesCustomTo. Wins over both the trailing-day buttons and the month picker when both dates are set. */
+  salesCustomTo: null,      /* 'YYYY-MM-DD' */
   itemSort: 'revenue',      /* 'revenue' | 'qty' - how BOTH item tables ("Every menu item" and the simulator's) are ordered by popularity; shared so the two never disagree */
   salesError: null,
   simOverrides: {},         /* itemKey -> { cost: '<raw input string>'|null, sell: '<raw input string>'|null } - the Menu simulator's what-if layer. Never touches RECIPE_DATA - purely a scenario on top of it, so trying "what if I dropped the price 50c" never risks the real recipe/menu data. null/'' means "use current". */
@@ -1495,6 +1497,19 @@ function salesMonthLabel(mk) {
   if (!mk) return '';
   var hit = recentSalesMonths(36).filter(function (m) { return m.key === mk; })[0];
   return hit ? hit.label : String(mk);
+}
+/* One phrase describing whichever period is currently in effect - a custom
+   date range, a picked calendar month, or a trailing-day window - shared by
+   the sales-mix card and the simulator's summary so they never describe the
+   same data differently. Custom range wins over month, which wins over the
+   trailing-day buttons (matches the precedence in fetchItemSales). */
+function salesPeriodPhrase() {
+  if (costingState.salesCustomFrom && costingState.salesCustomTo) {
+    return 'from ' + costingState.salesCustomFrom + ' to ' + costingState.salesCustomTo;
+  }
+  if (costingState.salesMonth) return 'for ' + salesMonthLabel(costingState.salesMonth);
+  var days = (costingState.salesData && costingState.salesData.days) || 0;
+  return 'over ' + days + ' day' + (days === 1 ? '' : 's');
 }
 
 /* One shared popularity sort for BOTH item tables ("Every menu item" on the
@@ -1537,13 +1552,18 @@ function itemSortToggle() {
 }
 
 function fetchItemSales() {
-  /* A picked calendar month wins over the trailing-days buttons: the backend
-     takes either an explicit from/to or a days span, so this just builds
-     whichever the current selection implies. */
+  /* A custom date range wins over a picked calendar month, which wins over
+     the trailing-days buttons: the backend takes either an explicit from/to
+     or a days span, so this just builds whichever the current selection
+     implies. */
   var url;
-  var mr = costingState.salesMonth ? salesMonthRange(costingState.salesMonth) : null;
-  if (mr) url = '/api/recipe-sales?from=' + mr.from + '&to=' + mr.to;
-  else url = '/api/recipe-sales?days=' + costingState.salesPeriodDays;
+  if (costingState.salesCustomFrom && costingState.salesCustomTo) {
+    url = '/api/recipe-sales?from=' + costingState.salesCustomFrom + '&to=' + costingState.salesCustomTo;
+  } else {
+    var mr = costingState.salesMonth ? salesMonthRange(costingState.salesMonth) : null;
+    if (mr) url = '/api/recipe-sales?from=' + mr.from + '&to=' + mr.to;
+    else url = '/api/recipe-sales?days=' + costingState.salesPeriodDays;
+  }
   fetch(url).then(function (res) {
     return res.ok ? res.json() : Promise.reject(new Error('http ' + res.status));
   }).then(function (data) {
@@ -1964,8 +1984,8 @@ function render() {
   /* Nav */
   var nav = el('div', 'nav');
   var tabs = isManual()
-    ? [ { key: 'dashboard', label: 'Dashboard' }, { key: 'manager', label: 'Manager view' }, { key: 'costing', label: 'Recipe costing' }, { key: 'ingredients', label: 'Ingredients' }, { key: 'enter', label: 'Enter numbers' }, { key: 'settings', label: 'Settings' } ]
-    : [ { key: 'dashboard', label: 'Dashboard' }, { key: 'manager', label: 'Manager view' }, { key: 'costing', label: 'Recipe costing' }, { key: 'ingredients', label: 'Ingredients' }, { key: 'connections', label: 'Connections' }, { key: 'recon', label: 'Check your numbers' }, { key: 'settings', label: 'Settings' } ];
+    ? [ { key: 'dashboard', label: 'Dashboard' }, { key: 'manager', label: 'Manager view' }, { key: 'costing', label: 'Recipe costing' }, { key: 'enter', label: 'Enter numbers' }, { key: 'settings', label: 'Settings' } ]
+    : [ { key: 'dashboard', label: 'Dashboard' }, { key: 'manager', label: 'Manager view' }, { key: 'costing', label: 'Recipe costing' }, { key: 'connections', label: 'Connections' }, { key: 'recon', label: 'Check your numbers' }, { key: 'settings', label: 'Settings' } ];
   tabs.forEach(function (t) {
     var b = el('button', 'nav-tab' + (state.view === t.key ? ' active' : ''));
     b.innerHTML = t.label + ((t.key === 'recon' && anyConfiguredSource() && unconfirmedConnectedMetrics().length) ? '<span class="dot"></span>' : '');
@@ -1999,14 +2019,14 @@ function render() {
   }
 
   if (isManual() && (state.view === 'connections' || state.view === 'recon')) state.view = 'dashboard';
-  /* The Menu simulator is no longer its own tab - it lives inside Recipe
-     costing now. Anything still pointing at the old view (a bookmark, a
-     stale state) lands on the tab that contains it rather than nowhere. */
-  if (state.view === 'simulator') state.view = 'costing';
+  /* The Menu simulator and Ingredient prices are no longer their own tabs -
+     they live inside Recipe costing now. Anything still pointing at an old
+     view (a bookmark, a stale state) lands on the tab that contains it
+     rather than nowhere. */
+  if (state.view === 'simulator' || state.view === 'ingredients') state.view = 'costing';
   if (state.view === 'dashboard') renderDashboard(root);
   else if (state.view === 'manager') renderManager(root);
   else if (state.view === 'costing') renderCosting(root);
-  else if (state.view === 'ingredients') renderIngredients(root);
   else if (state.view === 'enter') renderManualEntry(root);
   else if (state.view === 'connections') renderConnections(root);
   else if (state.view === 'recon') renderRecon(root);
@@ -3053,8 +3073,7 @@ function renderIngredients(root) {
      pack size back exactly as they were even after a dozen small edits. */
   if (!costingState.ingSnapshot) costingState.ingSnapshot = deepClone(RECIPE_DATA.raw);
 
-  root.appendChild(el('div', 'screen-title', 'Ingredients'));
-  root.appendChild(el('p', 'screen-sub',
+  root.appendChild(el('p', 'recon-inst',
     'Every raw ingredient your recipes can use, with the pack size and pack price each one is costed at. '
     + 'Change something here and every menu item using it re-costs the moment you save. '
     + 'Renaming an existing ingredient isn’t supported yet - delete it and add it again under the new name instead.'));
@@ -3159,13 +3178,6 @@ function renderIngredients(root) {
   addIngRow.appendChild(newIngInp); addIngRow.appendChild(addIngBtn);
   ingCard.appendChild(addIngRow);
   root.appendChild(ingCard);
-
-  /* Where the OTHER half of editing now lives, so this tab doesn't look like
-     it's missing the recipes it used to also hold. */
-  var xref = el('div', 'recon-card fade-in');
-  xref.appendChild(el('div', 'recon-inst',
-    'Looking for what goes into a dish - patty size, an extra sauce, the sell price? That’s on the <b>Recipe costing</b> tab now: click any menu item in the "Every menu item" table and it opens right there, next to its COGS%.'));
-  root.appendChild(xref);
 }
 
 /* "Real sales mix" - actual food cost weighted by what Square says really
@@ -3176,13 +3188,15 @@ function renderSalesMix(root, report) {
   var head = el('div', 'recon-head');
   head.appendChild(el('span', 'recon-metric', 'Real sales mix (Square)'));
   var periodWrap = el('span');
+  var customActive = !!(costingState.salesCustomFrom && costingState.salesCustomTo);
   [{ d: 28, label: '4 weeks' }, { d: 84, label: '12 weeks' }, { d: 182, label: '26 weeks' }].forEach(function (p) {
-    var active = !costingState.salesMonth && costingState.salesPeriodDays === p.d;
+    var active = !customActive && !costingState.salesMonth && costingState.salesPeriodDays === p.d;
     var b = el('button', 'btn-tiny' + (active ? ' btn-tiny-active' : ''), p.label);
     b.style.marginLeft = '0.35rem';
     b.onclick = function () {
       costingState.salesPeriodDays = p.d;
-      costingState.salesMonth = null; /* a trailing window and a fixed month are alternatives, never both */
+      costingState.salesMonth = null; /* a trailing window, a fixed month and a custom range are alternatives, never more than one at once */
+      costingState.salesCustomFrom = null; costingState.salesCustomTo = null;
       costingState.salesLoaded = false;
       fetchItemSales(); render();
     };
@@ -3202,13 +3216,52 @@ function renderSalesMix(root, report) {
     o.value = m.key; o.textContent = m.label;
     monthSel.appendChild(o);
   });
-  monthSel.value = costingState.salesMonth || '';
+  monthSel.value = customActive ? '' : (costingState.salesMonth || '');
   monthSel.onchange = function () {
     costingState.salesMonth = monthSel.value || null;
+    costingState.salesCustomFrom = null; costingState.salesCustomTo = null;
     costingState.salesLoaded = false;
     fetchItemSales(); render();
   };
   periodWrap.appendChild(monthSel);
+
+  /* Or any custom date range - for "the week of the flood", a long weekend,
+     a promo period, anything that doesn't line up with a trailing window or
+     a whole calendar month. Both dates need to be set before it applies, so
+     picking the first one doesn't fire a request for a one-day range. */
+  var customWrap = el('span', 'sort-toggle');
+  customWrap.style.marginLeft = '0.45rem';
+  customWrap.appendChild(el('span', 'sort-toggle-label', 'Or custom:'));
+  var fromInp = document.createElement('input');
+  fromInp.type = 'date'; fromInp.className = 'cost-inp';
+  fromInp.value = costingState.salesCustomFrom || '';
+  var toInp = document.createElement('input');
+  toInp.type = 'date'; toInp.className = 'cost-inp'; toInp.style.marginLeft = '0.25rem';
+  toInp.value = costingState.salesCustomTo || '';
+  function applyCustomRange() {
+    var f = fromInp.value || null, t = toInp.value || null;
+    costingState.salesCustomFrom = f; costingState.salesCustomTo = t;
+    if (f && t) {
+      costingState.salesMonth = null; /* a custom range replaces the month/trailing pick once it's complete */
+      costingState.salesLoaded = false;
+      fetchItemSales(); render();
+    }
+  }
+  fromInp.onchange = applyCustomRange;
+  toInp.onchange = applyCustomRange;
+  customWrap.appendChild(fromInp);
+  customWrap.appendChild(toInp);
+  if (customActive) {
+    var clearBtn = el('button', 'btn-tiny', 'Clear');
+    clearBtn.style.marginLeft = '0.35rem';
+    clearBtn.onclick = function () {
+      costingState.salesCustomFrom = null; costingState.salesCustomTo = null;
+      costingState.salesLoaded = false;
+      fetchItemSales(); render();
+    };
+    customWrap.appendChild(clearBtn);
+  }
+  periodWrap.appendChild(customWrap);
   head.appendChild(periodWrap);
   card.appendChild(head);
 
@@ -3230,14 +3283,14 @@ function renderSalesMix(root, report) {
 
   var mix = buildSalesMix(report);
   if (!mix || !mix.days) {
-    card.appendChild(el('div', 'recon-inst', costingState.salesMonth
-      ? 'No Square sales stored for that month yet - it backfills automatically in the background, so an older month can take a little while to fill in.'
+    card.appendChild(el('div', 'recon-inst', (costingState.salesMonth || (costingState.salesCustomFrom && costingState.salesCustomTo))
+      ? 'No Square sales stored for that period yet - it backfills automatically in the background, so an older or unusual date range can take a little while to fill in.'
       : 'No Square sales data stored for this period yet - it backfills automatically in the background and will fill in over the next little while.'));
     root.appendChild(card);
     return;
   }
 
-  var periodLine = costingState.salesMonth
+  var periodLine = (costingState.salesMonth || (costingState.salesCustomFrom && costingState.salesCustomTo))
     ? ('Over ' + esc(mix.from || '') + ' to ' + esc(mix.to || '') + ' of Square sales')
     : ('Over ' + mix.days + ' day' + (mix.days === 1 ? '' : 's') + ' of Square sales');
   var summaryLine = periodLine
@@ -3519,9 +3572,7 @@ function renderSimulator(root) {
   /* Says WHICH period this is weighted by, in the same words the "Real sales
      mix" card above uses - a picked calendar month reads as that month, not
      as "over N days", so it's obvious the simulator follows the picker. */
-  sHead.appendChild(el('span', 'recon-metric', costingState.salesMonth
-    ? ('Current vs proposed, for ' + salesMonthLabel(costingState.salesMonth))
-    : ('Current vs proposed, over ' + (costingState.salesData.days || 0) + ' days')));
+  sHead.appendChild(el('span', 'recon-metric', 'Current vs proposed, ' + salesPeriodPhrase()));
   var resetBtn = el('button', 'btn-tiny' + (anyOverride ? '' : ' sim-hidden'), 'Reset all simulated changes');
   resetBtn.onclick = function () { costingState.simOverrides = {}; render(); };
   sHead.appendChild(resetBtn);
@@ -3563,30 +3614,6 @@ function renderSimulator(root) {
   var hintLine = el('div', 'recon-inst' + (anyOverride ? ' sim-hidden' : ''), 'Nothing simulated yet - change a "Proposed cost" or "Proposed sell" below to see the impact.');
   summary.appendChild(hintLine);
   root.appendChild(summary);
-
-  /* ---- Menu engineering quadrant ---- */
-  var qCard = el('div', 'recon-card fade-in');
-  qCard.appendChild(el('div', 'recon-metric', 'Menu mix: Snail / Staple / Hidden Gem / Hero'));
-  var qInst = el('div', 'recon-inst');
-  qCard.appendChild(qInst);
-  var qGrid = el('div', 'sim-quadrant');
-  var QUAD_BOXES = [
-    { key: 'hero', label: 'Hero', cls: 'sim-q-hero' },
-    { key: 'staple', label: 'Staple', cls: 'sim-q-staple' },
-    { key: 'hiddenGem', label: 'Hidden Gem', cls: 'sim-q-gem' },
-    { key: 'snail', label: 'Snail', cls: 'sim-q-snail' },
-  ];
-  var qBoxRefs = {};
-  QUAD_BOXES.forEach(function (box) {
-    var b = el('div', 'sim-q-box ' + box.cls);
-    var title = el('div', 'sim-q-title', box.label);
-    var items = el('div', 'sim-q-items', '—');
-    b.appendChild(title); b.appendChild(items);
-    qGrid.appendChild(b);
-    qBoxRefs[box.key] = { title: title, items: items, label: box.label };
-  });
-  qCard.appendChild(qGrid);
-  root.appendChild(qCard);
 
   /* ---- Per-item what-if table ---- */
   var tableCard = el('div', 'recon-card fade-in');
@@ -3693,21 +3720,6 @@ function renderSimulator(root) {
     var monthly = costingState.salesData.days ? (rollup.netChange / costingState.salesData.days * 30) : null;
     monthSpan.textContent = monthly != null ? ((monthly >= 0 ? '+' : '') + fmtMoney(monthly, true)) : '—';
     monthSpan.className = 'sim-summary-new' + (monthly != null && Math.abs(monthly) > 0.005 ? ' ' + (monthly >= 0 ? 'sim-up' : 'sim-down') : '');
-
-    var quad = buildQuadrant(rows);
-    qInst.innerHTML = quad
-      ? 'Popularity vs profitability, each split at this group’s own average (avg popularity ' + quad.avgPop.toFixed(1) + '%, avg COGS% ' + quad.avgCogs.toFixed(1) + '%) - not fixed numbers, so the split moves as your sales mix does. '
-        + '<b>Hero</b> = sells well and profitable, protect it. <b>Staple</b> = sells well but thin margin, look for a small price or cost win. <b>Hidden Gem</b> = very profitable but under-ordered, worth promoting. <b>Snail</b> = neither - candidate to cut, reprice, or rework.'
-        + (anyOv ? ' Reflects your simulated changes above.' : '')
-      : '';
-    QUAD_BOXES.forEach(function (box) {
-      var list = quad ? quad.boxes[box.key] : [];
-      var ref = qBoxRefs[box.key];
-      ref.title.textContent = ref.label + ' (' + list.length + ')';
-      var names = list.slice().sort(function (a, b) { return b.revenue - a.revenue; }).slice(0, 10).map(function (r) { return r.display; }).join(', ');
-      ref.items.textContent = names || '—';
-      if (list.length > 10) ref.items.textContent += ' + ' + (list.length - 10) + ' more';
-    });
   }
 
   recompute();
@@ -4072,6 +4084,24 @@ function renderCosting(root) {
     batchCard.appendChild(bTable);
     root.appendChild(batchCard);
   }
+
+  /* ---- Ingredient prices, folded in here ----
+     Was its own top-level tab, but it's raw ingredient cost - the thing that
+     feeds every number above - so keeping it a tab away from the report it
+     drives just meant more clicking between the two. Named "Ingredient
+     prices" rather than plain "Ingredients" so it doesn't get confused with
+     a menu item's own ingredient list in the inline item editor above.
+     Collapsed by default so the costing report stays the thing you land on. */
+  var ingWrap = document.createElement('details');
+  ingWrap.className = 'cost-details';
+  var ingSum = document.createElement('summary');
+  ingSum.className = 'cost-summary';
+  ingSum.textContent = 'Ingredient prices · pack size and pack cost for every raw ingredient';
+  ingWrap.appendChild(ingSum);
+  var ingBody = el('div');
+  renderIngredients(ingBody);
+  ingWrap.appendChild(ingBody);
+  root.appendChild(ingWrap);
 
   /* ---- Menu simulator, folded in here ----
      It was its own top-level tab, but it's the same subject (what a dish
