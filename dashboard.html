@@ -1493,6 +1493,7 @@ function saveRecipeData(onDone) {
          inline item panel would leave that tab holding a snapshot from
          before it, and Discard would silently undo saved work. */
       costingState.ingSnapshot = deepClone(RECIPE_DATA.raw);
+      costingState.ingRecipeSnapshot = deepClone(RECIPE_DATA.recipes);
       onDone([]);
     })
     .catch(function () { onDone(['Save failed - check your connection and try again.']); });
@@ -1525,6 +1526,55 @@ function deleteRawIngredient(key) {
   var users = whichRecipesUse(key);
   if (users.length) return 'Still used in: ' + users.join(', ') + '. Remove it from those first.';
   delete RECIPE_DATA.raw[key];
+  return null;
+}
+/* Some raw ingredients are ALSO sold on their own, at a till, as a Square
+   modifier (ADD PINEAPPLE) - Kane wants to pick which ones so their sales
+   have somewhere to match to, rather than every add-on needing a full
+   from-scratch "+ Add menu item". This is exactly the existing "raw-self"
+   pattern six items already use (bacon, cheese slice, pineapple, pickles,
+   halloumi, chicken bites): a recipe that shares the raw ingredient's own
+   key, with one line pointing right back at itself. isItemSellable() checks
+   for that recipe with inRollup on (so it shows in "Every menu item" and can
+   be picked in the sales-mix matcher); toggling it off just hides it again
+   (inRollup: false) rather than deleting the recipe, since something else
+   may already reference this ingredient as a raw-self line inside another
+   burger and deleting would break that. Toggling it on for an ingredient
+   that's never been sellable before creates the wrapper recipe fresh, and
+   needs a sell price to do it - callers should have one ready (a prompt, or
+   a fixed value) before calling. */
+function isItemSellable(key) {
+  var r = RECIPE_DATA.recipes[key];
+  return !!(r && r.inRollup);
+}
+function setItemSellable(key, sellable, newSellPrice) {
+  var r = RECIPE_DATA.recipes[key];
+  if (!sellable) {
+    if (r) r.inRollup = false;
+    return null;
+  }
+  if (r) { r.inRollup = true; return null; }
+  var ing = RECIPE_DATA.raw[key];
+  if (!ing) return 'No raw ingredient "' + key + '" to sell.';
+  var price = parseFloat(newSellPrice);
+  if (!isFinite(price) || price < 0) return 'Enter a valid sell price.';
+  RECIPE_DATA.recipes[key] = {
+    category: 'add on', display: ing.display || key, inRollup: true,
+    lines: [{ ingredient: key, kind: 'raw-self', qty: 1 }],
+    portions: 1, sellPrice: price, sellSource: 'manual',
+  };
+  /* Square's own "Add-ons" modifier list names its options "ADD <thing>"
+     (ADD PINEAPPLE, ADD BACON, ...) - the moment a raw ingredient becomes a
+     sellable item, guess that same convention and pre-wire the match, so
+     real Square sales for it start counting immediately rather than sitting
+     in "not matched" until Kane finds and fixes it himself. Only when
+     nothing's aliased that Square key yet - never overwrite a decision
+     (including a deliberate "__ignore__") he's already made. */
+  var guessKey = 'add ' + key;
+  if (modifierAliasFor(guessKey) === undefined) {
+    MODIFIER_ALIASES[guessKey] = key;
+    saveModifierAliases();
+  }
   return null;
 }
 function addRecipe(name) {
@@ -1560,6 +1610,10 @@ var costingState = {
      prices to come from the weekly supplier check and this tab touched only
      for a one-off correction or a brand new ingredient, never routine use. */
   ingSnapshot: null,     /* deep copy of RECIPE_DATA.raw taken on entering the tab, for Discard */
+  ingRecipeSnapshot: null, /* deep copy of RECIPE_DATA.recipes taken alongside ingSnapshot - the
+     "sell as its own item" checkbox below can create/flip a recipe entry
+     right from this tab, so Discard has to undo that too, not just the raw
+     ingredient edits it originally covered. */
   ingProblems: [],
   ingSaving: false,
   ingSavedAt: null,
@@ -3270,10 +3324,13 @@ function renderIngredients(root) {
   /* Snapshot on first paint of the tab, so "Discard" can put every price and
      pack size back exactly as they were even after a dozen small edits. */
   if (!costingState.ingSnapshot) costingState.ingSnapshot = deepClone(RECIPE_DATA.raw);
+  if (!costingState.ingRecipeSnapshot) costingState.ingRecipeSnapshot = deepClone(RECIPE_DATA.recipes);
 
   root.appendChild(el('p', 'recon-inst',
     'Every raw ingredient your recipes can use, with the pack size and pack price each one is costed at. '
     + 'Change something here and every menu item using it re-costs the moment you save. '
+    + 'Tick "Sell as item" for one that’s also rung up on its own (an add-on, a sauce sold separately) so it '
+    + 'shows in "Every menu item" below and can be matched to its real Square sales. '
     + 'Renaming an existing ingredient isn’t supported yet - delete it and add it again under the new name instead.'));
 
   /* ---- Save / discard bar ---- */
@@ -3289,6 +3346,7 @@ function renderIngredients(root) {
       if (!problems.length) {
         costingState.ingSavedAt = Date.now();
         costingState.ingSnapshot = deepClone(RECIPE_DATA.raw); /* new baseline for a later Discard */
+        costingState.ingRecipeSnapshot = deepClone(RECIPE_DATA.recipes);
       }
       render();
     });
@@ -3296,7 +3354,9 @@ function renderIngredients(root) {
   var discardBtn = el('button', 'btn-plain', 'Discard changes');
   discardBtn.onclick = function () {
     RECIPE_DATA.raw = costingState.ingSnapshot;
+    RECIPE_DATA.recipes = costingState.ingRecipeSnapshot;
     costingState.ingSnapshot = null;
+    costingState.ingRecipeSnapshot = null;
     costingState.ingProblems = [];
     render();
   };
@@ -3323,6 +3383,7 @@ function renderIngredients(root) {
   ingHead.appendChild(el('span', 'cost-col-num', 'Pack size'));
   ingHead.appendChild(el('span', 'cost-col-num', 'Unit'));
   ingHead.appendChild(el('span', 'cost-col-num', 'Pack price'));
+  ingHead.appendChild(el('span', 'cost-col-num', 'Sell as item'));
   ingTable.appendChild(ingHead);
   Object.keys(RECIPE_DATA.raw).sort().forEach(function (key) {
     var ing = RECIPE_DATA.raw[key];
@@ -3356,6 +3417,36 @@ function renderIngredients(root) {
     priceInp.oninput = function () { ing.price = parseFloat(priceInp.value) || 0; };
     var priceCell = el('span', 'cost-col-num'); priceCell.appendChild(priceInp);
     row.appendChild(priceCell);
+
+    var sellCell = el('span', 'cost-col-num');
+    var sellChk = document.createElement('input');
+    sellChk.type = 'checkbox';
+    sellChk.className = 'ing-sell-chk';
+    sellChk.checked = isItemSellable(key);
+    sellChk.title = sellChk.checked
+      ? 'Sold as its own menu item - untick to stop matching Square sales to it'
+      : 'Tick if this is also rung up on its own (an add-on, a sauce sold separately)';
+    sellChk.onchange = function () {
+      if (sellChk.checked) {
+        var existing = RECIPE_DATA.recipes[key];
+        var price = existing ? existing.sellPrice : window.prompt('Sell price for "' + (ing.display || key) + '" as its own item ($):', '');
+        if (price == null) { sellChk.checked = false; return; }
+        var err = setItemSellable(key, true, price);
+        if (err) { alert(err); sellChk.checked = false; return; }
+      } else {
+        setItemSellable(key, false);
+      }
+      render();
+    };
+    sellCell.appendChild(sellChk);
+    if (isItemSellable(key)) {
+      var priceNote = document.createElement('span');
+      priceNote.className = 'ing-sell-price';
+      priceNote.style.marginLeft = '0.35rem';
+      priceNote.textContent = '$' + fmtMoney(RECIPE_DATA.recipes[key].sellPrice);
+      sellCell.appendChild(priceNote);
+    }
+    row.appendChild(sellCell);
 
     ingTable.appendChild(row);
   });
