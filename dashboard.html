@@ -1598,6 +1598,19 @@ function deleteRecipe(key) {
 }
 
 var costingState = {
+  /* Which collapsible sections of the Recipe costing tab are open, keyed by
+     a short name each section owns - kept in state rather than read off the
+     DOM's own <details open> because render() rebuilds the whole tree on
+     every change (a click, a save, typing in an unrelated field), which
+     would otherwise snap every section shut behind Kane's back the moment
+     he touched anything else on the page. "Every menu item" and "Real sales
+     mix" default open since they're what Kane actually looks at; the rest
+     default closed so landing on the tab means less scrolling, per his own
+     "make each section collapsible" ask. */
+  openSections: {
+    whyNote: false, salesMix: true, topIngredients: false, everyItem: true,
+    batch: false, ingredients: false, simulator: false, gaps: false,
+  },
   overridePrices: {},   /* ingredient name -> { price, note } fetched from /api/ingredient-prices */
   overridesUpdatedAt: null,
   overridesLoaded: false,
@@ -4193,6 +4206,27 @@ function renderItemEditPanel(key) {
   return panel;
 }
 
+/* One collapsible section of the Recipe costing tab: a <details>/<summary>
+   whose open/closed state lives in costingState.openSections[key] rather
+   than the DOM (see the comment on openSections for why) - toggling it
+   writes straight back to that state so a later, unrelated render() leaves
+   it exactly as Kane left it, open or shut. renderBody(container) builds
+   whatever goes inside, same contract as renderIngredients(root)/
+   renderSimulator(root) already used. */
+function collapsibleSection(root, key, summaryText, renderBody) {
+  var wrap = document.createElement('details');
+  wrap.className = 'cost-details';
+  wrap.open = !!costingState.openSections[key];
+  wrap.ontoggle = function () { costingState.openSections[key] = wrap.open; };
+  var sum = document.createElement('summary');
+  sum.className = 'cost-summary';
+  sum.textContent = summaryText;
+  wrap.appendChild(sum);
+  var body = el('div');
+  renderBody(body);
+  wrap.appendChild(body);
+  root.appendChild(wrap);
+}
 function renderCosting(root) {
   root.appendChild(el('div', 'screen-title', 'Recipe costing'));
   root.appendChild(el('p', 'screen-sub',
@@ -4310,70 +4344,40 @@ function renderCosting(root) {
     + report.overTargetCount + ' item' + (report.overTargetCount === 1 ? '' : 's') + ' currently sit above the 30% target.'));
   root.appendChild(summary);
 
-  var note = el('div', 'recon-card fade-in');
-  note.appendChild(el('div', 'recon-inst',
-    '<b>Why this won’t exactly match your actual COGS%.</b> Two structural reasons, both by design: (1) this counts every raw ingredient at true cost, including Windsor Farm Shop veg you pay cash for and which never appears in your actual COGS/workbook figures - so theoretical will always run a bit above actual’s "missing" cash spend, in the other direction. (2) this is an equal-weighted average across the menu, not weighted by how many of each item you actually sell - a highly-discounted-margin item selling in huge volume moves your real COGS% more than it moves this average. The "Real sales mix" section below fixes (2) using your actual Square sales - including add-on, extra-patty and combo upsells, which are modifiers in Square rather than separate menu buttons.'
-  ));
-  root.appendChild(note);
+  collapsibleSection(root, 'whyNote', 'Why this won’t exactly match your actual COGS%', function (body) {
+    var note = el('div', 'recon-card fade-in');
+    note.appendChild(el('div', 'recon-inst',
+      'Two structural reasons, both by design: (1) this counts every raw ingredient at true cost, including Windsor Farm Shop veg you pay cash for and which never appears in your actual COGS/workbook figures - so theoretical will always run a bit above actual’s "missing" cash spend, in the other direction. (2) this is an equal-weighted average across the menu, not weighted by how many of each item you actually sell - a highly-discounted-margin item selling in huge volume moves your real COGS% more than it moves this average. The "Real sales mix" section below fixes (2) using your actual Square sales - including add-on, extra-patty and combo upsells, which are modifiers in Square rather than separate menu buttons.'
+    ));
+    body.appendChild(note);
+  });
 
-  renderSalesMix(root, report);
+  collapsibleSection(root, 'salesMix', 'Real sales mix (Square) · actual COGS%, weighted by what really sells', function (body) { renderSalesMix(body, report); });
 
   /* Top cost-driving ingredients */
   if (report.topIngredients.length) {
-    var tiCard = el('div', 'recon-card fade-in');
-    tiCard.appendChild(el('div', 'recon-metric', 'Top cost-driving ingredients'));
-    tiCard.appendChild(el('div', 'recon-inst', 'Total theoretical cost contributed across every menu item and add-on counted above (one serve of each) - the ingredients worth negotiating or price-watching hardest.'));
-    var tiList = el('div', 'cost-ing-list');
-    var maxCost = report.topIngredients[0].cost || 1;
-    report.topIngredients.forEach(function (ing) {
-      var row = el('div', 'cost-ing-row');
-      row.appendChild(el('span', 'cost-ing-name', esc(ing.name)));
-      var barWrap = el('span', 'cost-ing-barwrap');
-      var bar = el('span', 'cost-ing-bar');
-      bar.style.width = Math.max(2, (ing.cost / maxCost) * 100).toFixed(1) + '%';
-      barWrap.appendChild(bar);
-      row.appendChild(barWrap);
-      row.appendChild(el('span', 'cost-ing-val', fmtMoney(ing.cost, true)));
-      tiList.appendChild(row);
+    collapsibleSection(root, 'topIngredients', 'Top cost-driving ingredients', function (body) {
+      var tiCard = el('div', 'recon-card fade-in');
+      tiCard.appendChild(el('div', 'recon-inst', 'Total theoretical cost contributed across every menu item and add-on counted above (one serve of each) - the ingredients worth negotiating or price-watching hardest.'));
+      var tiList = el('div', 'cost-ing-list');
+      var maxCost = report.topIngredients[0].cost || 1;
+      report.topIngredients.forEach(function (ing) {
+        var row = el('div', 'cost-ing-row');
+        row.appendChild(el('span', 'cost-ing-name', esc(ing.name)));
+        var barWrap = el('span', 'cost-ing-barwrap');
+        var bar = el('span', 'cost-ing-bar');
+        bar.style.width = Math.max(2, (ing.cost / maxCost) * 100).toFixed(1) + '%';
+        barWrap.appendChild(bar);
+        row.appendChild(barWrap);
+        row.appendChild(el('span', 'cost-ing-val', fmtMoney(ing.cost, true)));
+        tiList.appendChild(row);
+      });
+      tiCard.appendChild(tiList);
+      body.appendChild(tiCard);
     });
-    tiCard.appendChild(tiList);
-    root.appendChild(tiCard);
   }
 
-  /* Per-item table - every row is also the way in to editing that item */
-  var tableCard = el('div', 'recon-card fade-in');
-  var itemsHead = el('div', 'recon-head');
-  itemsHead.appendChild(el('span', 'recon-metric', 'Every menu item'));
-  itemsHead.appendChild(itemSortToggle());
-  tableCard.appendChild(itemsHead);
-  tableCard.appendChild(el('div', 'recon-inst', 'Sorted by what actually sells - ' + (costingState.itemSort === 'qty' ? 'most sold first' : 'biggest earners first') + ', using the same Square period as "Real sales mix" above; items with no sales in that period sit at the bottom. Items above the 30% target are flagged. <b>Click any item</b> to change its ingredients, portion sizes or sell price.'));
-  /* Find-as-you-type filter - matches this table AND the batch/sauces one
-     below it, since both are the same "browse the menu" job and sharing one
-     box means Kane doesn't have to remember which table a sauce landed in.
-     Filters by hiding/showing rows already built rather than a full render()
-     on every keystroke, so the search box itself never loses focus mid-type -
-     the same fix already applied to the simulator's live-typing inputs. */
-  var searchWrap = el('div', 'conn-actions');
-  var searchInp = document.createElement('input');
-  searchInp.type = 'search'; searchInp.className = 'cost-inp-wide';
-  searchInp.placeholder = 'Find an item…';
-  searchInp.value = costingState.itemSearch;
-  searchInp.oninput = function () { costingState.itemSearch = searchInp.value; applyItemSearchFilter(); };
-  searchWrap.appendChild(searchInp);
-  tableCard.appendChild(searchWrap);
-  var noMatchMsg = el('div', 'recon-inst', 'No item matches that search.');
-  noMatchMsg.hidden = true;
-  var table = el('div', 'cost-table cost-table-items');
-  var thead = el('div', 'cost-row cost-row-head');
-  thead.appendChild(el('span', 'cost-col-name', 'Item'));
-  thead.appendChild(el('span', 'cost-col-num', 'Cost'));
-  thead.appendChild(el('span', 'cost-col-num', 'Sell'));
-  thead.appendChild(el('span', 'cost-col-num', 'Qty sold'));
-  thead.appendChild(el('span', 'cost-col-num', 'Revenue'));
-  thead.appendChild(el('span', 'cost-col-num', 'COGS%'));
-  table.appendChild(thead);
-
-  /* Real sales joined in per item so this table can be ordered (and read) by
+  /* Real sales joined in per item so the table can be ordered (and read) by
      popularity. buildSalesMix is pure and cheap, and is called again by the
      sales-mix and simulator sections in this same render pass - matching the
      existing pattern rather than threading a third copy through. */
@@ -4387,86 +4391,69 @@ function renderCosting(root) {
   sortByPopularity(sellableItems, function (it) { return salesByKey[it.key]; });
   var batchItems = report.items.filter(function (it) { return !it.inRollup; });
 
+  /* The search box (built inside the "Every menu item" section below) has to
+     filter the "Batch sauces and prep" section too - both are the same
+     "browse the menu" job, and sharing one box means Kane doesn't have to
+     remember which table a sauce landed in. itemWraps/batchWraps/noMatchMsg
+     are declared up here, outside either section's own collapsible body, so
+     applyItemSearchFilter() (also top-level) can see whichever of them
+     actually got built regardless of which sections are currently open. */
   var itemWraps = []; /* {wrap, name, key} - what applyItemSearchFilter() shows/hides */
-  sellableItems.forEach(function (it) {
-    var sold = salesByKey[it.key];
-    var open = costingState.openItemKey === it.key;
-    var wrap = document.createElement('div');
-    var row = el('div', 'cost-row cost-row-click' + (it.overTarget ? ' cost-row-over' : '') + (open ? ' cost-row-open' : ''));
-    var nameCell = el('span', 'cost-col-name');
-    nameCell.innerHTML = esc(it.display) + (it.sellSource === 'sheet' ? ' <span class="cost-tag">no current menu price</span>' : '');
-    row.appendChild(nameCell);
-    row.appendChild(el('span', 'cost-col-num', fmtMoney(it.cost, true)));
-    row.appendChild(el('span', 'cost-col-num', it.sell != null ? fmtMoney(it.sell, true) : '—'));
-    row.appendChild(el('span', 'cost-col-num', sold ? (sold.qty % 1 === 0 ? String(sold.qty) : sold.qty.toFixed(1)) : '—'));
-    row.appendChild(el('span', 'cost-col-num', sold ? fmtMoney(sold.revenue, true) : '—'));
-    var pctCell = el('span', 'cost-col-num' + (it.pct != null ? ' ' + costingPctClass(it.pct) : ''));
-    pctCell.textContent = it.pct != null ? it.pct.toFixed(1) + '%' : '—';
-    row.appendChild(pctCell);
-    row.title = open ? 'Click to close' : 'Click to edit this item';
-    row.onclick = (function (key) { return function () {
-      /* Clicking a different item while one is open discards nothing: edits
-         are already live in RECIPE_DATA either way, and the snapshot only
-         backs the Cancel button - so closing without saving is Cancel. */
-      if (costingState.openItemKey === key) {
-        if (costingState.itemEditSnapshot) RECIPE_DATA.recipes[key] = costingState.itemEditSnapshot;
-        closeItemEditor();
-      } else {
-        if (costingState.openItemKey && costingState.itemEditSnapshot && RECIPE_DATA.recipes[costingState.openItemKey]) {
-          RECIPE_DATA.recipes[costingState.openItemKey] = costingState.itemEditSnapshot;
-        }
-        openItemEditor(key);
-      }
-      render();
-    }; })(it.key);
-    wrap.appendChild(row);
-    if (open) wrap.appendChild(renderItemEditPanel(it.key));
-    table.appendChild(wrap);
-    itemWraps.push({ wrap: wrap, name: it.display.toLowerCase(), key: it.key });
-  });
-  tableCard.appendChild(table);
-  tableCard.appendChild(noMatchMsg);
+  var batchWraps = [];
+  var noMatchMsg = null;
 
-  /* ---- Add a whole new menu item ---- */
-  var addRow = el('div', 'conn-actions');
-  var newItemInp = document.createElement('input');
-  newItemInp.type = 'text'; newItemInp.placeholder = 'New menu item name'; newItemInp.className = 'cost-inp-wide';
-  newItemInp.value = costingState.itemNewName;
-  newItemInp.oninput = function () { costingState.itemNewName = newItemInp.value; };
-  var addBtn = el('button', 'btn-small', '+ Add menu item');
-  addBtn.onclick = function () {
-    var name = costingState.itemNewName;
-    var err = addRecipe(name);
-    if (err) { alert(err); return; }
-    costingState.itemNewName = '';
-    /* Opens straight into its own editor - a brand new item has no
-       ingredients yet, and saving it in that state is (correctly) refused,
-       so there's nothing useful to do except fill it in now. */
-    openItemEditor(String(name).trim().toLowerCase());
-    render();
-  };
-  addRow.appendChild(newItemInp); addRow.appendChild(addBtn);
-  tableCard.appendChild(addRow);
-  root.appendChild(tableCard);
+  /* Per-item table - every row is also the way in to editing that item */
+  collapsibleSection(root, 'everyItem', 'Every menu item', function (tableBody) {
+    var tableCard = el('div', 'recon-card fade-in');
+    var itemsHead = el('div', 'recon-head');
+    itemsHead.appendChild(el('span', 'recon-metric', 'Every menu item'));
+    itemsHead.appendChild(itemSortToggle());
+    tableCard.appendChild(itemsHead);
+    tableCard.appendChild(el('div', 'recon-inst', 'Sorted by what actually sells - ' + (costingState.itemSort === 'qty' ? 'most sold first' : 'biggest earners first') + ', using the same Square period as "Real sales mix" above; items with no sales in that period sit at the bottom. Items above the 30% target are flagged. <b>Click any item</b> to change its ingredients, portion sizes or sell price.'));
+    /* Find-as-you-type filter. Filters by hiding/showing rows already built
+       rather than a full render() on every keystroke, so the search box
+       itself never loses focus mid-type - the same fix already applied to
+       the simulator's live-typing inputs. */
+    var searchWrap = el('div', 'conn-actions');
+    var searchInp = document.createElement('input');
+    searchInp.type = 'search'; searchInp.className = 'cost-inp-wide';
+    searchInp.placeholder = 'Find an item…';
+    searchInp.value = costingState.itemSearch;
+    searchInp.oninput = function () { costingState.itemSearch = searchInp.value; applyItemSearchFilter(); };
+    searchWrap.appendChild(searchInp);
+    tableCard.appendChild(searchWrap);
+    noMatchMsg = el('div', 'recon-inst', 'No item matches that search.');
+    noMatchMsg.hidden = true;
+    var table = el('div', 'cost-table cost-table-items');
+    var thead = el('div', 'cost-row cost-row-head');
+    thead.appendChild(el('span', 'cost-col-name', 'Item'));
+    thead.appendChild(el('span', 'cost-col-num', 'Cost'));
+    thead.appendChild(el('span', 'cost-col-num', 'Sell'));
+    thead.appendChild(el('span', 'cost-col-num', 'Qty sold'));
+    thead.appendChild(el('span', 'cost-col-num', 'Revenue'));
+    thead.appendChild(el('span', 'cost-col-num', 'COGS%'));
+    table.appendChild(thead);
 
-  /* Batch/prep sub-recipes: sauces etc. are never sold on their own, so a
-     "sell price"/COGS% for them is meaningless - shown separately, cost only,
-     purely so the numbers feeding into the dishes above aren't a black box.
-     Clickable to edit for the same reason the dishes are - a sauce recipe
-     is exactly the kind of thing that gets tweaked. */
-  if (batchItems.length) {
-    var batchCard = el('div', 'recon-card fade-in');
-    batchCard.appendChild(el('div', 'recon-metric', 'Batch sauces and prep (not sold on their own)'));
-    batchCard.appendChild(el('div', 'recon-inst', 'Cost per batch, at current ingredient prices - these feed into the dishes above and aren’t counted in the overall COGS% themselves. Click one to edit it.'));
-    var bTable = el('div', 'cost-table');
-    var batchWraps = []; /* same shape as itemWraps, so applyItemSearchFilter() covers both tables */
-    batchItems.sort(function (a, b) { return a.display.localeCompare(b.display); }).forEach(function (it) {
-      var bOpen = costingState.openItemKey === it.key;
-      var bWrap = document.createElement('div');
-      var row = el('div', 'cost-row-batch cost-row-click' + (bOpen ? ' cost-row-open' : ''));
-      row.appendChild(el('span', 'cost-col-name', esc(it.display)));
-      row.appendChild(el('span', 'cost-col-num', fmtMoney(it.batchTotal, true) + ' / batch (' + it.portions + ' serves, ' + fmtMoney(it.cost, true) + ' each)'));
+    sellableItems.forEach(function (it) {
+      var sold = salesByKey[it.key];
+      var open = costingState.openItemKey === it.key;
+      var wrap = document.createElement('div');
+      var row = el('div', 'cost-row cost-row-click' + (it.overTarget ? ' cost-row-over' : '') + (open ? ' cost-row-open' : ''));
+      var nameCell = el('span', 'cost-col-name');
+      nameCell.innerHTML = esc(it.display) + (it.sellSource === 'sheet' ? ' <span class="cost-tag">no current menu price</span>' : '');
+      row.appendChild(nameCell);
+      row.appendChild(el('span', 'cost-col-num', fmtMoney(it.cost, true)));
+      row.appendChild(el('span', 'cost-col-num', it.sell != null ? fmtMoney(it.sell, true) : '—'));
+      row.appendChild(el('span', 'cost-col-num', sold ? (sold.qty % 1 === 0 ? String(sold.qty) : sold.qty.toFixed(1)) : '—'));
+      row.appendChild(el('span', 'cost-col-num', sold ? fmtMoney(sold.revenue, true) : '—'));
+      var pctCell = el('span', 'cost-col-num' + (it.pct != null ? ' ' + costingPctClass(it.pct) : ''));
+      pctCell.textContent = it.pct != null ? it.pct.toFixed(1) + '%' : '—';
+      row.appendChild(pctCell);
+      row.title = open ? 'Click to close' : 'Click to edit this item';
       row.onclick = (function (key) { return function () {
+        /* Clicking a different item while one is open discards nothing: edits
+           are already live in RECIPE_DATA either way, and the snapshot only
+           backs the Cancel button - so closing without saving is Cancel. */
         if (costingState.openItemKey === key) {
           if (costingState.itemEditSnapshot) RECIPE_DATA.recipes[key] = costingState.itemEditSnapshot;
           closeItemEditor();
@@ -4478,19 +4465,81 @@ function renderCosting(root) {
         }
         render();
       }; })(it.key);
-      bWrap.appendChild(row);
-      if (bOpen) bWrap.appendChild(renderItemEditPanel(it.key));
-      bTable.appendChild(bWrap);
-      batchWraps.push({ wrap: bWrap, name: it.display.toLowerCase(), key: it.key });
+      wrap.appendChild(row);
+      if (open) wrap.appendChild(renderItemEditPanel(it.key));
+      table.appendChild(wrap);
+      itemWraps.push({ wrap: wrap, name: it.display.toLowerCase(), key: it.key });
     });
-    batchCard.appendChild(bTable);
-    root.appendChild(batchCard);
+    tableCard.appendChild(table);
+    tableCard.appendChild(noMatchMsg);
+
+    /* ---- Add a whole new menu item ---- */
+    var addRow = el('div', 'conn-actions');
+    var newItemInp = document.createElement('input');
+    newItemInp.type = 'text'; newItemInp.placeholder = 'New menu item name'; newItemInp.className = 'cost-inp-wide';
+    newItemInp.value = costingState.itemNewName;
+    newItemInp.oninput = function () { costingState.itemNewName = newItemInp.value; };
+    var addBtn = el('button', 'btn-small', '+ Add menu item');
+    addBtn.onclick = function () {
+      var name = costingState.itemNewName;
+      var err = addRecipe(name);
+      if (err) { alert(err); return; }
+      costingState.itemNewName = '';
+      /* Opens straight into its own editor - a brand new item has no
+         ingredients yet, and saving it in that state is (correctly) refused,
+         so there's nothing useful to do except fill it in now. */
+      openItemEditor(String(name).trim().toLowerCase());
+      render();
+    };
+    addRow.appendChild(newItemInp); addRow.appendChild(addBtn);
+    tableCard.appendChild(addRow);
+    tableBody.appendChild(tableCard);
+  });
+
+  /* Batch/prep sub-recipes: sauces etc. are never sold on their own, so a
+     "sell price"/COGS% for them is meaningless - shown separately, cost only,
+     purely so the numbers feeding into the dishes above aren't a black box.
+     Clickable to edit for the same reason the dishes are - a sauce recipe
+     is exactly the kind of thing that gets tweaked. */
+  if (batchItems.length) {
+    collapsibleSection(root, 'batch', 'Batch sauces and prep (not sold on their own)', function (batchBody) {
+      var batchCard = el('div', 'recon-card fade-in');
+      batchCard.appendChild(el('div', 'recon-inst', 'Cost per batch, at current ingredient prices - these feed into the dishes above and aren’t counted in the overall COGS% themselves. Click one to edit it.'));
+      var bTable = el('div', 'cost-table');
+      batchItems.sort(function (a, b) { return a.display.localeCompare(b.display); }).forEach(function (it) {
+        var bOpen = costingState.openItemKey === it.key;
+        var bWrap = document.createElement('div');
+        var row = el('div', 'cost-row-batch cost-row-click' + (bOpen ? ' cost-row-open' : ''));
+        row.appendChild(el('span', 'cost-col-name', esc(it.display)));
+        row.appendChild(el('span', 'cost-col-num', fmtMoney(it.batchTotal, true) + ' / batch (' + it.portions + ' serves, ' + fmtMoney(it.cost, true) + ' each)'));
+        row.onclick = (function (key) { return function () {
+          if (costingState.openItemKey === key) {
+            if (costingState.itemEditSnapshot) RECIPE_DATA.recipes[key] = costingState.itemEditSnapshot;
+            closeItemEditor();
+          } else {
+            if (costingState.openItemKey && costingState.itemEditSnapshot && RECIPE_DATA.recipes[costingState.openItemKey]) {
+              RECIPE_DATA.recipes[costingState.openItemKey] = costingState.itemEditSnapshot;
+            }
+            openItemEditor(key);
+          }
+          render();
+        }; })(it.key);
+        bWrap.appendChild(row);
+        if (bOpen) bWrap.appendChild(renderItemEditPanel(it.key));
+        bTable.appendChild(bWrap);
+        batchWraps.push({ wrap: bWrap, name: it.display.toLowerCase(), key: it.key });
+      });
+      batchCard.appendChild(bTable);
+      batchBody.appendChild(batchCard);
+    });
   }
 
   /* Shows/hides already-built rows in both tables above rather than
      re-rendering, so the search box never loses focus mid-keystroke. Keeps
      whichever item's panel is currently open visible regardless of the
-     search text, so typing never yanks away the thing being edited. */
+     search text, so typing never yanks away the thing being edited. Safe to
+     call even when a section (and so its rows) hasn't been built at all -
+     itemWraps/batchWraps just stay empty and noMatchMsg stays null. */
   function applyItemSearchFilter() {
     var q = costingState.itemSearch.trim().toLowerCase();
     var anyShown = false;
@@ -4499,12 +4548,10 @@ function renderCosting(root) {
       w.wrap.hidden = !show;
       if (show) anyShown = true;
     });
-    noMatchMsg.hidden = anyShown;
-    if (typeof batchWraps !== 'undefined') {
-      batchWraps.forEach(function (w) {
-        w.wrap.hidden = !(!q || w.name.indexOf(q) >= 0 || w.key === costingState.openItemKey);
-      });
-    }
+    if (noMatchMsg) noMatchMsg.hidden = anyShown;
+    batchWraps.forEach(function (w) {
+      w.wrap.hidden = !(!q || w.name.indexOf(q) >= 0 || w.key === costingState.openItemKey);
+    });
   }
   applyItemSearchFilter();
 
@@ -4515,16 +4562,9 @@ function renderCosting(root) {
      prices" rather than plain "Ingredients" so it doesn't get confused with
      a menu item's own ingredient list in the inline item editor above.
      Collapsed by default so the costing report stays the thing you land on. */
-  var ingWrap = document.createElement('details');
-  ingWrap.className = 'cost-details';
-  var ingSum = document.createElement('summary');
-  ingSum.className = 'cost-summary';
-  ingSum.textContent = 'Ingredient prices · pack size and pack cost for every raw ingredient';
-  ingWrap.appendChild(ingSum);
-  var ingBody = el('div');
-  renderIngredients(ingBody);
-  ingWrap.appendChild(ingBody);
-  root.appendChild(ingWrap);
+  collapsibleSection(root, 'ingredients', 'Ingredient prices · pack size and pack cost for every raw ingredient', function (body) {
+    renderIngredients(body);
+  });
 
   /* ---- Menu simulator, folded in here ----
      It was its own top-level tab, but it's the same subject (what a dish
@@ -4532,32 +4572,27 @@ function renderCosting(root) {
      above, and having it a tab away meant deciding to change a price and
      testing that change were in two different places. Collapsed by default
      so the costing report stays the thing you land on. */
-  var simWrap = document.createElement('details');
-  simWrap.className = 'cost-details';
-  var simSum = document.createElement('summary');
-  simSum.className = 'cost-summary';
-  simSum.textContent = 'Menu simulator · try a price or recipe change before you make it';
-  simWrap.appendChild(simSum);
-  var simBody = el('div');
-  renderSimulator(simBody);
-  simWrap.appendChild(simBody);
-  root.appendChild(simWrap);
+  collapsibleSection(root, 'simulator', 'Menu simulator · try a price or recipe change before you make it', function (body) {
+    renderSimulator(body);
+  });
 
-  /* Known gaps / assumptions, always visible so nothing is silently guessed */
-  var gaps = el('div', 'recon-card fade-in');
-  gaps.appendChild(el('div', 'recon-metric', 'Known gaps and assumptions'));
-  gaps.appendChild(el('div', 'recon-inst',
-    '<ul style="margin:0.3rem 0 0 1.1rem; padding:0;">'
-    + '<li>Eggs: priced at the preferred 600g/$65 carton. When City Fine Food substitutes the 700g/$85 carton (out-of-stock), actual cost runs a little higher than shown here - not modelled per-week.</li>'
-    + '<li>Avocado: Windsor Farm Shop prices by the tray with no printed count; using an estimated 5kg tray (~25 avocados at the ~200g you weighed) - update this if you get an exact count.</li>'
-    + '<li>"Caramelised onion" is a $1 menu add-on with no ingredient recipe in the costing sheet at all, so it isn’t costed here - it now shows up in the sales-mix matcher as an unmatched add-on until a recipe exists for it. Same for the salad extras (lettuce, tomato, beetroot, onion, jalapenos, lettuce bun).</li>'
-    + '<li>Add-ons, extra patties and "make it a combo" upsells are modifiers in Square, not separate menu buttons, and are now counted in the sales mix. Square prices them separately from the item they’re attached to, so their revenue is added on top rather than already being inside the item’s. Sauce, bun, drink and milkshake-flavour choices are left out - several similarly-named recipes, and nothing extra was billed for the choice itself - so pick those yourself in the matcher if you want them counted.</li>'
-    + '<li>"Bacon & egg burger" rarely sells and isn’t on the printed menu - shown at its last known sell price rather than a current one.</li>'
-    + '<li>Ingredient prices are the ones saved to this dashboard (the recipe sheet’s originals, plus anything you’ve changed on Ingredient prices). The weekly supplier price check doesn’t feed into here yet - when it does, this tab will say when it last landed.</li>'
-    + '<li>The main table above is still an equal-weighted menu average (every dish counted once). The "Real sales mix" section above is the sales-weighted version, from your actual Square sales - use that one for "what\'s really driving my food cost".</li>'
-    + '</ul>'
-  ));
-  root.appendChild(gaps);
+  /* Known gaps / assumptions - collapsed by default like everything else
+     here, but never silently dropped: still one click away, not deleted. */
+  collapsibleSection(root, 'gaps', 'Known gaps and assumptions', function (body) {
+    var gaps = el('div', 'recon-card fade-in');
+    gaps.appendChild(el('div', 'recon-inst',
+      '<ul style="margin:0.3rem 0 0 1.1rem; padding:0;">'
+      + '<li>Eggs: priced at the preferred 600g/$65 carton. When City Fine Food substitutes the 700g/$85 carton (out-of-stock), actual cost runs a little higher than shown here - not modelled per-week.</li>'
+      + '<li>Avocado: Windsor Farm Shop prices by the tray with no printed count; using an estimated 5kg tray (~25 avocados at the ~200g you weighed) - update this if you get an exact count.</li>'
+      + '<li>"Caramelised onion" is a $1 menu add-on with no ingredient recipe in the costing sheet at all, so it isn’t costed here - it now shows up in the sales-mix matcher as an unmatched add-on until a recipe exists for it. Same for the salad extras (lettuce, tomato, beetroot, onion, jalapenos, lettuce bun) unless you’ve ticked "Sell as item" for them under Ingredient prices.</li>'
+      + '<li>Add-ons, extra patties and "make it a combo" upsells are modifiers in Square, not separate menu buttons, and are now counted in the sales mix. Square prices them separately from the item they’re attached to, so their revenue is added on top rather than already being inside the item’s. Sauce, bun, drink and milkshake-flavour choices are left out - several similarly-named recipes, and nothing extra was billed for the choice itself - so pick those yourself in the matcher if you want them counted.</li>'
+      + '<li>"Bacon & egg burger" rarely sells and isn’t on the printed menu - shown at its last known sell price rather than a current one.</li>'
+      + '<li>Ingredient prices are the ones saved to this dashboard (the recipe sheet’s originals, plus anything you’ve changed on Ingredient prices). The weekly supplier price check doesn’t feed into here yet - when it does, this tab will say when it last landed.</li>'
+      + '<li>The main table above is still an equal-weighted menu average (every dish counted once). The "Real sales mix" section above is the sales-weighted version, from your actual Square sales - use that one for "what\'s really driving my food cost".</li>'
+      + '</ul>'
+    ));
+    body.appendChild(gaps);
+  });
 }
 
 /* ---------- Connections view ---------- */
