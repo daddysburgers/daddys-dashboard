@@ -2593,6 +2593,7 @@ function managerSparkRow(key, loc, r) {
   if (series && series.values.some(function (x) { return x != null; })) {
     var vals = series.values.slice(-8);
     var labs = series.months.slice(-8);
+    var dollarVals = (series.dollarValues || []).slice(-8);
     /* Widen the scale to always include the target, same as the main Dashboard's
        trend chart, so a target line is never off the top of the bars just
        because trade has consistently cleared (or missed) it. */
@@ -2604,7 +2605,15 @@ function managerSparkRow(key, loc, r) {
       bar.style.height = h + '%';
       if (i === vals.length - 1) bar.className = 'cur';
       var lab = weekly ? ('wk of ' + fmtShortDate(fromIso(labs[i]))) : labs[i];
-      bar.setAttribute('data-lab', lab + ' · ' + (v == null ? 'no data' : trendLabel(key, v)));
+      /* Match the main Dashboard's trend tooltip: cogs/wage/overheads/profit
+         show both the dollar figure and the percentage, e.g. "$31,500
+         (31.2%)", not just the percentage the bar height is still based on. */
+      var tip;
+      if (v == null) { tip = 'no data'; }
+      else if (key === 'cogs' || key === 'wage' || key === 'overheads' || key === 'profit') {
+        tip = (dollarVals[i] == null ? '—' : fmtMoney(dollarVals[i], false)) + ' (' + trendLabel(key, v) + ')';
+      } else { tip = trendLabel(key, v); }
+      bar.setAttribute('data-lab', lab + ' · ' + tip);
       spark.appendChild(bar);
     });
     if (tgt != null && max > 0) {
