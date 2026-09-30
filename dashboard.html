@@ -701,9 +701,24 @@ function fetchAppState() {
     }
     if (d.recon) { RECON = d.recon; try { localStorage.setItem('vd_recon', JSON.stringify(RECON)); } catch (e) {} }
     if (d.orgOk) { ORG_OK = d.orgOk; try { localStorage.setItem('vd_orgok', JSON.stringify(ORG_OK)); } catch (e) {} }
-    if (d.manual) { MANUAL = d.manual; try { localStorage.setItem('vd_manual', JSON.stringify(MANUAL)); } catch (e) {} }
-    if (d.overrides) { OVERRIDES = d.overrides; try { localStorage.setItem('vd_overrides', JSON.stringify(OVERRIDES)); } catch (e) {} }
-    if (d.uber) { UBER = d.uber; try { localStorage.setItem('vd_uber', JSON.stringify(UBER)); } catch (e) {} }
+    /* MANUAL/OVERRIDES/UBER hold Kane's own typed-in figures, keyed per
+       period. The server write is debounced 800ms (queueAppStateSync) - if
+       this device is closed or reloaded inside that window, the POST never
+       goes out, so the server's copy is stale. This GET used to blindly
+       REPLACE the local copy with that stale server copy, silently erasing
+       whatever was just typed the moment the page reloaded (real bug hit
+       2026-09-30: Kane entered a week's figures, they vanished). Fixed by
+       merging server data UNDER the local copy instead of replacing it -
+       local always wins per period-key, so a not-yet-synced entry survives
+       a reload, and any period this device never touched still picks up
+       whatever another device saved. Trade-off: a period explicitly
+       cleared locally (the "Clear (use live figures)" button) can reappear
+       here if that clear's own POST hadn't landed yet either - rare
+       compared to the data-loss this fixes, and self-heals once the clear
+       does sync. */
+    if (d.manual) { MANUAL = Object.assign({}, d.manual, MANUAL); try { localStorage.setItem('vd_manual', JSON.stringify(MANUAL)); } catch (e) {} }
+    if (d.overrides) { OVERRIDES = Object.assign({}, d.overrides, OVERRIDES); try { localStorage.setItem('vd_overrides', JSON.stringify(OVERRIDES)); } catch (e) {} }
+    if (d.uber) { UBER = Object.assign({}, d.uber, UBER); try { localStorage.setItem('vd_uber', JSON.stringify(UBER)); } catch (e) {} }
     if (d.salesAliases) { SALES_ALIASES = d.salesAliases; try { localStorage.setItem('vd_salesaliases', JSON.stringify(SALES_ALIASES)); } catch (e) {} }
     if (d.modifierAliases) { MODIFIER_ALIASES = d.modifierAliases; try { localStorage.setItem('vd_modifieraliases', JSON.stringify(MODIFIER_ALIASES)); } catch (e) {} }
     if (d.priceSeen) { PRICE_SEEN = d.priceSeen; try { localStorage.setItem('vd_priceseen', JSON.stringify(PRICE_SEEN)); } catch (e) {} }
