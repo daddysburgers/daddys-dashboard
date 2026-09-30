@@ -3269,14 +3269,14 @@ function trendBars(key, r) {
     rect.setAttribute('height', h.toFixed(1));
     rect.setAttribute('rx', '1.5');
     var lab = weekly ? ('wk of ' + fmtShortDate(fromIso(buckets[i]))) : buckets[i];
-    /* Kane wants the trend hover on the main dashboard to show the dollar
-       figure for cogs/wage/overheads (and now profit too), not the
-       percentage-of-revenue the bar heights/target-line/color-coding are
-       still based on (those stay % - targets like "Wage 30%" are
-       percentages). Scoped to the main dashboard's trendBars only, not
-       Manager view's managerSparkRow. */
+    /* Kane wants the trend hover on the main dashboard to show BOTH the
+       dollar figure and the percentage-of-revenue for cogs/wage/overheads/
+       profit - the bar heights/target-line/color-coding stay purely
+       percentage-based (targets like "Wage 30%" are percentages), this only
+       changes what the tooltip TEXT reads. Scoped to the main dashboard's
+       trendBars only, not Manager view's managerSparkRow. */
     var tipVal = (key === 'cogs' || key === 'wage' || key === 'overheads' || key === 'profit')
-      ? (dollarVals[i] == null ? '—' : fmtMoney(dollarVals[i], false))
+      ? (dollarVals[i] == null ? '—' : fmtMoney(dollarVals[i], false) + ' (' + trendLabel(key, vals[i]) + ')')
       : trendLabel(key, vals[i]);
     rect.setAttribute('data-lab', lab + ' · ' + tipVal);
     svg.appendChild(rect);
